@@ -68,8 +68,8 @@ msrv = "1.88"
 # Headline figures. Every one is asserted by a test in the repository, so if one
 # changes here without the suite changing, the suite is the one that is right.
 fixture_count = "591"
-type_count = "210"
-schema_count = "449"
+type_count = "215"
+schema_count = "462"
 api_count = "14"
 
 [[extra.nav]]
