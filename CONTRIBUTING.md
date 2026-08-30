@@ -263,9 +263,17 @@ those are the comments that stop the change being undone six months later.
 
 ## Releasing
 
-1. Move the `## [Unreleased]` entries in `CHANGELOG.md` under
-   `## [X.Y.Z] - YYYY-MM-DD`, and bump `version` in `Cargo.toml`.
-2. Merge that, then tag the merge commit `vX.Y.Z` and push the tag.
+`## [Unreleased]` is where entries live during development; it becomes the
+version heading at the moment you release, which is one command:
+
+```console
+scripts/prepare-release.sh 0.1.0
+```
+
+That closes the Unreleased section under `## [0.1.0] - <today>`, opens a fresh
+empty one, updates the changelog link references, and bumps `Cargo.toml` and
+`Cargo.lock`. Commit it, merge, then tag the merge commit `v0.1.0` and push the
+tag.
 
 `.github/workflows/release.yml` takes it from there: it checks the tag against
 the manifest and the changelog, re-runs fmt, clippy and the suite on the tagged

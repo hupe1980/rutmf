@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-30
+
 ### Added
 
 - **Core model** (`rutmf::core`) — I/O-free, `wasm32` clean.
@@ -1398,4 +1400,5 @@ Two features earlier plans promised are dropped rather than deferred.
   while nested types inside a response do not. `tests/coverage.rs` checks the
   division against the OAS.
 
-[Unreleased]: https://github.com/hupe1980/rutmf/commits/main
+[Unreleased]: https://github.com/hupe1980/rutmf/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/hupe1980/rutmf/releases/tag/v0.1.0
