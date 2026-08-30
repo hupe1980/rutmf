@@ -1,0 +1,25 @@
+[
+  {
+    "id": "1069",
+    "@type": "UnGroupAlarm",
+    "href": "/alarmManagement/v5/unGroupAlarm/1069",
+    "sourceSystemId": "ems-1",
+    "alarmChangedTime": "2019-07-03T03:42:12.861Z",
+    "parentAlarm": {
+      "@type": "Alarm",
+      "id": "8675309"
+    },
+    "correlatedAlarm": [
+      {
+        "@type": "Alarm",
+        "id": "8675399"
+      },
+      {
+        "@type": "Alarm",
+        "id": "8675399"
+      }
+    ],
+    "state": "inProgress",
+    "unGroupedAlarm": []
+  }
+]

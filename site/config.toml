@@ -1,0 +1,87 @@
+# Zola configuration for the rutmf documentation site.
+#
+# Built and deployed by .github/workflows/site.yml. `base_url` must match the
+# canonical origin exactly: it is what canonical links, Open Graph URLs and the
+# generated sitemap are built from, and a mismatch makes every one of them point
+# somewhere that does not serve the page.
+base_url = "https://hupe1980.github.io/rutmf"
+title = "rutmf"
+description = "Ergonomic, v5-first Rust types and clients for the TM Forum Open APIs. Typed references, real decimals, guaranteed round-trip fidelity, and a conformance suite over 591 official specification examples."
+
+default_language = "en"
+compile_sass = true
+minify_html = true
+generate_sitemap = true
+generate_robots_txt = false          # served from static/robots.txt instead
+author = "hupe1980"
+
+# Powers the docs search box. The JSON format is read directly by a few lines of
+# vanilla JavaScript, which avoids shipping the elasticlunr runtime for what is
+# a small corpus.
+build_search_index = true
+
+taxonomies = []
+
+[search]
+index_format = "elasticlunr_json"
+include_title = true
+include_description = true
+include_path = true
+include_content = true
+
+[markdown]
+smart_punctuation = false
+render_emoji = false
+external_links_target_blank = true
+external_links_no_referrer = true
+bottom_footnotes = true
+
+# `style = "css"` emits colour classes instead of inline styles, and Zola writes
+# one stylesheet per theme. That is what lets code blocks follow the reader's
+# light/dark preference with no JavaScript and no flash of the wrong theme.
+[markdown.highlighting]
+style = "class"
+light_theme = "ayu-light"
+dark_theme = "ayu-dark"
+
+[link_checker]
+# docs.rs and crates.io serve nothing until the crate is published, and the
+# GitHub repository is not public yet either. Every other external link is
+# checked on each build, which is what catches a moved TM Forum page.
+skip_prefixes = [
+  "https://docs.rs/",
+  "https://crates.io/",
+  "https://github.com/hupe1980/rutmf",
+]
+
+[extra]
+# Consumed by templates/base.html for navigation, meta tags and structured data.
+crate_name = "rutmf"
+crate_version = "0.1"
+repo_url = "https://github.com/hupe1980/rutmf"
+docsrs_url = "https://docs.rs/rutmf"
+cratesio_url = "https://crates.io/crates/rutmf"
+tmf_apis_url = "https://github.com/tmforum-apis"
+license = "MIT OR Apache-2.0"
+msrv = "1.88"
+
+# Headline figures. Every one is asserted by a test in the repository, so if one
+# changes here without the suite changing, the suite is the one that is right.
+fixture_count = "591"
+type_count = "210"
+schema_count = "449"
+api_count = "14"
+
+[[extra.nav]]
+name = "Docs"
+url = "/docs/"
+
+[[extra.nav]]
+name = "API reference"
+url = "https://docs.rs/rutmf"
+external = true
+
+[[extra.nav]]
+name = "GitHub"
+url = "https://github.com/hupe1980/rutmf"
+external = true

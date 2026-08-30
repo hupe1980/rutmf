@@ -1,0 +1,23 @@
+{
+  "source": "tmforum-apis/TMF639_ResourceInventory @ TMF639-Resource_Inventory_Management-v5.0.0.oas.yaml",
+  "license": "Apache-2.0",
+  "spec_version": "5.0.0",
+  "examples": {
+    "Resource_list_example_response.json": "Resource_list_example_response",
+    "Resource_retrieve_example_response.json": "Resource_retrieve_example_response",
+    "CreateResource_with_references_to_SubResource_request.json": "CreateResource_with_references_to_SubResource_request",
+    "CreateResource_with_references_to_SubResource_response.json": "CreateResource_with_references_to_SubResource_response",
+    "updateResource_using_json-patch-query_json_request.json": "updateResource_using_json-patch-query_json_request",
+    "updateResource_using_json-patch-query_json_response.json": "updateResource_using_json-patch-query_json_response",
+    "updateResource_using_json-patch_json_request.json": "updateResource_using_json-patch_json_request",
+    "updateResource_using_json-patch_json_response.json": "updateResource_using_json-patch_json_response",
+    "updateResource_using_merge-patch_json_request.json": "updateResource_using_merge-patch_json_request",
+    "updateResource_using_merge-patch_json_response.json": "updateResource_using_merge-patch_json_response",
+    "updateResource_using_json_request.json": "updateResource_using_json_request",
+    "updateResource_using_json_response.json": "updateResource_using_json_response",
+    "ResourceCreateEvent_request.json": "ResourceCreateEvent_request",
+    "ResourceAttributeValueChangeEvent_request.json": "ResourceAttributeValueChangeEvent_request",
+    "ResourceStateChangeEvent_request.json": "ResourceStateChangeEvent_request",
+    "ResourceDeleteEvent_request.json": "ResourceDeleteEvent_request"
+  }
+}

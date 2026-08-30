@@ -1,0 +1,183 @@
+[package]
+name = "rutmf"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Ergonomic, v5-first Rust types and clients for the TM Forum Open API domain model (unofficial)"
+documentation = "https://docs.rs/rutmf"
+repository = "https://github.com/hupe1980/rutmf"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["tmforum", "telco", "oda", "openapi", "bss"]
+categories = ["api-bindings", "data-structures"]
+# The conformance and coverage suites read `specs/` and `tests/fixtures/`, which
+# together are ~1.2 MiB — most of the package, and useless to a consumer. They
+# are excluded as a pair: shipping the tests without the specifications they
+# read would make `cargo test` on the published crate fail, which is worse than
+# not shipping them at all. Run the suites from the repository.
+exclude = ["/specs", "/tests", "/.github", "/.vscode", "/xtask", "/deny.toml"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
+indexmap = { version = "2.14.0", features = ["serde"] }
+chrono = { version = "0.4.45", default-features = false, features = ["serde", "std", "clock"] }
+rust_decimal = { version = "1.42.1", default-features = false, features = ["serde", "std"] }
+bon = "3.10.0"
+thiserror = "2.0.20"
+
+# --- api (transport-agnostic client layer) ---
+futures-core = { version = "0.3.34", optional = true }
+async-trait = { version = "0.1.89", optional = true }
+http = { version = "1.5.0", optional = true }
+bytes = { version = "1.10.1", optional = true }
+
+# --- transport-reqwest ---
+reqwest = { version = "0.13.4", optional = true, default-features = false, features = ["json"] }
+tokio = { version = "1.53.1", optional = true, default-features = false, features = ["sync", "time"] }
+# --- optional server binding (the counterpart of transport-reqwest) ---
+axum = { version = "0.8.7", optional = true, default-features = false, features = ["http1", "tokio"] }
+
+# --- optional schema derives ---
+schemars = { version = "1.2.2", optional = true, features = ["chrono04", "rust_decimal1"] }
+
+[dev-dependencies]
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
+# Reads the vendored OAS in `tests/coverage.rs`. A maintained `serde_yaml` fork.
+serde_norway = "0.9.42"
+# `tests/server.rs` serves the server layer over a real socket.
+axum = { version = "0.8.7", features = ["http1", "tokio"] }
+futures = "0.3.34"
+proptest = "1.11.0"
+async-trait = "0.1.89"
+bytes = "1.10.1"
+http = "1.5.0"
+similar-asserts = "1.7.0"
+# Used by `tests/conformance.rs` to canonicalise timestamps before comparison.
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+
+[features]
+default = ["party", "customer", "product", "order", "ticket", "alarm", "bill", "account"]
+
+# --- domain models (pure types, no I/O) ---
+party = []
+# TMF629 `Customer.account` is an `AccountRef`, and TMF666 models the target.
+customer = ["party", "account"]
+resource = ["party"]
+service = ["party", "resource"]
+product = ["party", "service", "resource"]
+order = ["party", "product"]
+# The assurance domain. It references parties and, through `RelatedEntity`, any
+# other domain — but by `EntityRef`, so it depends only on `party`.
+ticket = ["party"]
+# Alarms reference the services they affect, so the fault domain needs the
+# service model — an alarm is only actionable if you know what it is breaking.
+alarm = ["service"]
+# A bill charges for products, and is issued to a party.
+bill = ["party", "product"]
+# An account names the parties who hold it and how they are contacted.
+account = ["party"]
+
+# --- client layer ---
+api = ["dep:futures-core", "dep:async-trait", "dep:http", "dep:bytes"]
+transport-reqwest = [
+    "api",
+    "dep:reqwest",
+    "dep:tokio",
+    "reqwest/rustls",
+    "reqwest/http2",
+    "reqwest/query",
+    "reqwest/form",
+]
+
+# --- per-API clients ---
+api-tmf620 = ["api", "product"]
+api-tmf621 = ["api", "ticket"]
+api-tmf622 = ["api", "order"]
+api-tmf629 = ["api", "customer"]
+api-tmf632 = ["api", "party"]
+# TMF634 declares `ImportJob`/`ExportJob` byte-for-byte as TMF620 does, so the
+# catalog client reuses `product`'s job types rather than duplicating them.
+api-tmf634 = ["api", "resource", "product"]
+api-tmf637 = ["api", "product"]
+api-tmf642 = ["api", "alarm"]
+api-tmf666 = ["api", "account"]
+api-tmf678 = ["api", "bill"]
+api-tmf638 = ["api", "service"]
+api-tmf639 = ["api", "resource"]
+api-tmf669 = ["api", "party"]
+api-tmf679 = ["api", "product"]
+
+# --- server layer ---
+server = ["api", "dep:async-trait"]
+server-axum = ["server", "dep:axum", "dep:tokio"]
+
+# --- extras ---
+mock = ["server"]
+schemars = ["dep:schemars"]
+
+full = [
+    "default",
+    "api",
+    "transport-reqwest",
+    "api-tmf620",
+    "api-tmf621",
+    "api-tmf622",
+    "api-tmf629",
+    "api-tmf632",
+    "api-tmf634",
+    "api-tmf637",
+    "api-tmf638",
+    "api-tmf639",
+    "api-tmf642",
+    "api-tmf666",
+    "api-tmf669",
+    "api-tmf678",
+    "api-tmf679",
+    "server",
+    "server-axum",
+    "mock",
+    "schemars",
+]
+
+# Examples exercise the client layer, which is not a default feature. Declaring
+# the requirement lets Cargo skip them on a default build instead of failing.
+[[example]]
+name = "catalog_sync"
+required-features = ["api-tmf620", "mock"]
+
+[[example]]
+name = "order_lifecycle"
+required-features = ["api-tmf620", "api-tmf622", "mock"]
+
+[[example]]
+name = "customer_onboarding"
+required-features = ["api-tmf629", "api-tmf632", "mock"]
+
+[[example]]
+name = "serve_catalog"
+required-features = ["server-axum", "api-tmf620", "transport-reqwest"]
+
+[[example]]
+name = "assurance_workflow"
+required-features = ["api-tmf621", "api-tmf642", "api-tmf678", "mock"]
+
+[[example]]
+name = "inventory_chain"
+required-features = ["api-tmf634", "api-tmf637", "api-tmf638", "api-tmf639", "mock"]
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+struct_excessive_bools = "allow"

@@ -1,0 +1,26 @@
+[
+  {
+    "@type": "CommentAlarm",
+    "id": "1045",
+    "href": "/alarmManagement/v5/ackAlarm/1045",
+    "comment": {
+      "@type": "Comment",
+      "userId": "bob@example.net",
+      "systemId": "ems-1",
+      "time": "2019-07-03T03:37:33.827Z",
+      "comment": "Dispatched"
+    },
+    "alarmPattern": [
+      {
+        "@type": "Alarm",
+        "id": "8675309"
+      },
+      {
+        "@type": "Alarm",
+        "id": "8675399"
+      }
+    ],
+    "state": "inProgress",
+    "commentedAlarm": []
+  }
+]

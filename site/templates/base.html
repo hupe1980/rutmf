@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+{#- `page` is undefined when rendering a section and vice versa, so every read
+    is guarded. `is_home` distinguishes the landing page, which is the one place
+    where appending the site name to its own title would stutter. -#}
+{%- set is_page = page is defined and page.title -%}
+{%- set is_section = section is defined and section.title -%}
+{%- set is_home = is_section and section.permalink == config.base_url ~ "/" -%}
+
+{%- if is_page %}{% set page_title = page.title %}
+{%- elif is_section %}{% set page_title = section.title %}
+{%- else %}{% set page_title = config.title %}{% endif -%}
+
+{%- if is_home or not (is_page or is_section) %}
+{%- set full_title = config.title ~ " — v5-first Rust for the TM Forum Open APIs" %}
+{%- else %}{% set full_title = page_title ~ " · " ~ config.title %}{% endif -%}
+
+{%- if is_page and page.description %}{% set page_description = page.description %}
+{%- elif is_section and section.description %}{% set page_description = section.description %}
+{%- else %}{% set page_description = config.description %}{% endif -%}
+
+{%- if is_page %}{% set canonical = page.permalink %}
+{%- elif is_section %}{% set canonical = section.permalink %}
+{%- else %}{% set canonical = config.base_url %}{% endif -%}
+
+<title>{{ full_title }}</title>
+<meta name="description" content="{{ page_description }}">
+<link rel="canonical" href="{{ canonical | safe }}">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{ config.title }}">
+<meta property="og:title" content="{{ full_title }}">
+<meta property="og:description" content="{{ page_description }}">
+<meta property="og:url" content="{{ canonical | safe }}">
+<meta property="og:locale" content="en">
+<meta property="og:image" content="{{ get_url(path='social-card.svg', trailing_slash=false) | safe }}">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ full_title }}">
+<meta name="twitter:description" content="{{ page_description }}">
+<meta name="twitter:image" content="{{ get_url(path='social-card.svg', trailing_slash=false) | safe }}">
+
+<meta name="theme-color" content="#0b1020" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+
+<link rel="icon" href="{{ get_url(path='favicon.svg', trailing_slash=false) | safe }}" type="image/svg+xml">
+
+<link rel="stylesheet" href="{{ get_url(path='main.css', trailing_slash=false) | safe }}">
+<link rel="stylesheet" href="{{ get_url(path='giallo-light.css', trailing_slash=false) | safe }}" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="{{ get_url(path='giallo-dark.css', trailing_slash=false) | safe }}" media="(prefers-color-scheme: dark)">
+
+{#- Structured data. `SoftwareSourceCode` is what a Rust crate actually is;
+    docs pages additionally declare themselves as `TechArticle` so a search
+    engine can tell reference material from the landing page. -#}
+<script type="application/ld+json">
+{{ {
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": config.extra.crate_name,
+  "description": config.description,
+  "url": config.base_url,
+  "codeRepository": config.extra.repo_url,
+  "programmingLanguage": "Rust",
+  "license": "https://spdx.org/licenses/Apache-2.0.html",
+  "author": {"@type": "Person", "name": config.extra.author | default(value="hupe1980")},
+  "keywords": "TM Forum, TMF Open API, TMF620, TMF622, TMF629, TMF632, TMF637, TMF638, TMF639, TMF630, Rust, OSS/BSS, telco, ODA, product catalog, product ordering"
+} | json_encode() | safe }}
+</script>
+{%- if is_page %}
+<script type="application/ld+json">
+{{ {
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": page.title,
+  "description": page_description,
+  "url": page.permalink,
+  "isPartOf": {"@type": "WebSite", "name": config.title, "url": config.base_url},
+  "inLanguage": "en"
+} | json_encode() | safe }}
+</script>
+{%- endif %}
+{% block head %}{% endblock head %}
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="{{ get_url(path='/') | safe }}">
+      <span class="brand-mark" aria-hidden="true">tmf</span>
+      <span class="brand-name">{{ config.extra.crate_name }}</span>
+    </a>
+    <nav aria-label="Main">
+      <ul class="nav">
+        {%- for item in config.extra.nav %}
+        <li><a href="{% if item.external %}{{ item.url }}{% else %}{{ get_url(path=item.url) | safe }}{% endif %}"
+               {% if item.external %}rel="noopener"{% endif %}>{{ item.name }}</a></li>
+        {%- endfor %}
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+{% block content %}{% endblock content %}
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div>
+      <p class="footer-title">{{ config.extra.crate_name }}</p>
+      <p class="muted">Dual-licensed {{ config.extra.license }}.</p>
+    </div>
+    <nav aria-label="Footer">
+      <ul>
+        <li><a href="{{ get_url(path='/docs/') | safe }}">Documentation</a></li>
+        <li><a href="{{ config.extra.docsrs_url }}" rel="noopener">API reference</a></li>
+        <li><a href="{{ config.extra.cratesio_url }}" rel="noopener">crates.io</a></li>
+        <li><a href="{{ config.extra.repo_url }}" rel="noopener">Source</a></li>
+      </ul>
+    </nav>
+    <p class="disclaimer">
+      Unofficial. A community implementation of the publicly available,
+      Apache-2.0-licensed TM Forum Open API specifications. Not affiliated with,
+      endorsed by, or certified by TM Forum. &ldquo;TM Forum&rdquo; is their trademark.
+    </p>
+  </div>
+</footer>
+</body>
+</html>

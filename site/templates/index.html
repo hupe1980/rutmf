@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+  <div class="wrap">
+    <p class="eyebrow">TM Forum Open API v5 · Rust</p>
+    <h1>The TM Forum domain model,<br>as Rust you would want to write.</h1>
+    <p class="lede">{{ section.extra.lede }}</p>
+
+    <div class="cta">
+      <a class="btn btn-primary" href="{{ get_url(path='/docs/getting-started/') | safe }}">Get started</a>
+      <a class="btn" href="{{ config.extra.docsrs_url }}" rel="noopener">API reference</a>
+      <a class="btn btn-ghost" href="{{ config.extra.repo_url }}" rel="noopener">GitHub</a>
+    </div>
+
+    <div class="install">
+      <code>cargo add {{ config.extra.crate_name }}</code>
+      <span class="muted">Domain models only &mdash; no HTTP, no TLS stack.</span>
+    </div>
+  </div>
+</section>
+
+<section class="wrap stats" aria-label="At a glance">
+  <dl>
+    <div><dt>{{ config.extra.api_count }}</dt><dd>v5 APIs, end to end</dd></div>
+    <div><dt>{{ config.extra.fixture_count }}</dt><dd>official examples, all asserted</dd></div>
+    <div><dt>{{ config.extra.type_count }}</dt><dd>types checked against {{ config.extra.schema_count }} schemas</dd></div>
+    <div><dt>{{ config.extra.msrv }}</dt><dd>MSRV, verified in CI</dd></div>
+  </dl>
+</section>
+
+<section class="wrap pitch">
+  {{ section.content | safe }}
+</section>
+
+<section class="wrap features" aria-labelledby="features-heading">
+  <h2 id="features-heading">What you get</h2>
+  <div class="grid">
+    {%- for card in section.extra.features %}
+    <article class="card">
+      <h3>{{ card.title }}</h3>
+      <p>{{ card.body | markdown(inline=true) | safe }}</p>
+    </article>
+    {%- endfor %}
+  </div>
+</section>
+
+<section class="wrap coverage" aria-labelledby="coverage-heading">
+  <h2 id="coverage-heading">Covered APIs</h2>
+  <p class="section-lede">
+    Each one is implemented end to end &mdash; domain types, client, test server,
+    conformance fixtures and schema coverage.
+  </p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>API</th><th>Version</th><th>Resources</th></tr></thead>
+      <tbody>
+        {%- for api in section.extra.apis %}
+        <tr>
+          <td><strong>{{ api.id }}</strong> {{ api.name }}</td>
+          <td><code>{{ api.version }}</code></td>
+          <td>{{ api.resources }}</td>
+        </tr>
+        {%- endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">
+    <strong>TMF641 Service Ordering and TMF688 Event Management are deliberately
+    absent</strong> &mdash; neither has a v5 release, and this crate models v5
+    rather than pretending otherwise.
+  </p>
+</section>
+
+<section class="wrap closing">
+  <h2>Start where you are</h2>
+  <div class="grid grid-3">
+    <a class="card card-link" href="{{ get_url(path='/docs/getting-started/') | safe }}">
+      <h3>Call a TMF API</h3>
+      <p>Add a client feature, point it at a base URL, and page through a catalog.</p>
+    </a>
+    <a class="card card-link" href="{{ get_url(path='/docs/serving-an-api/') | safe }}">
+      <h3>Serve a TMF API</h3>
+      <p>Implement five storage methods and get TMF630 semantics for free.</p>
+    </a>
+    <a class="card card-link" href="{{ get_url(path='/docs/testing/') | safe }}">
+      <h3>Test against one</h3>
+      <p>An in-process TMF server with real filtering, paging and patching.</p>
+    </a>
+  </div>
+</section>
+{% endblock content %}

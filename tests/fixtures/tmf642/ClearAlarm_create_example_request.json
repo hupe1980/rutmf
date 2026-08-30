@@ -1,0 +1,16 @@
+{
+  "@type": "ClearAlarm",
+  "clearSystemId": "ems-1",
+  "clearUserId": "bob@example.net",
+  "alarmClearedTime": "2019-07-03T03:55:45.937Z",
+  "alarmPattern": [
+    {
+      "@type": "AlarmRef",
+      "id": "8675309"
+    },
+    {
+      "@type": "AlarmRef",
+      "id": "8675399"
+    }
+  ]
+}

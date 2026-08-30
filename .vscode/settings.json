@@ -1,0 +1,8 @@
+{
+  // The client layer, mock server and schema derives are opt-in features, so
+  // analysing with defaults only leaves `rutmf::api` and `rutmf::mock`
+  // unresolved in examples and integration tests.
+  "rust-analyzer.cargo.features": "all",
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.check.allTargets": true
+}

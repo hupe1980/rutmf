@@ -1,0 +1,28 @@
+{
+  "source": "tmforum-apis/TMF638_ServiceInventory @ TMF638-Service_Inventory_Management-v5.0.0.oas.yaml",
+  "license": "Apache-2.0",
+  "spec_version": "5.0.0",
+  "examples": {
+    "Service_List_example_response.json": "Service_List_example_response",
+    "Service_List_example_with_Field_Selection_response.json": "Service_List_example_with_Field_Selection_response",
+    "Service_retrieve_example_response.json": "Service_retrieve_example_response",
+    "Service_Intent_retrieve_example_response.json": "Service_Intent_retrieve_example_response",
+    "Create_Service_request.json": "Create_Service_request",
+    "Create_Service_response.json": "Create_Service_response",
+    "Create_Service_with_intent_request.json": "Create_Service_with_intent_request",
+    "Create_Service_with_intent_response.json": "Create_Service_with_intent_response",
+    "Service_partialupdate_example_01_request.json": "Service_partialupdate_example_01_request",
+    "Service_partialupdate_example_01_response.json": "Service_partialupdate_example_01_response",
+    "Service_partialupdate_example_11_request.json": "Service_partialupdate_example_11_request",
+    "Service_partialupdate_example_11_response.json": "Service_partialupdate_example_11_response",
+    "Service_partialupdate_example_21_request.json": "Service_partialupdate_example_21_request",
+    "Service_partialupdate_example_21_response.json": "Service_partialupdate_example_21_response",
+    "Service_partialupdate_example_31_request.json": "Service_partialupdate_example_31_request",
+    "Service_partialupdate_example_31_response.json": "Service_partialupdate_example_31_response",
+    "Create_request.json": "Create_request",
+    "AttributeValueChange_request.json": "AttributeValueChange_request",
+    "StateChange_request.json": "StateChange_request",
+    "Delete_request.json": "Delete_request",
+    "OperatingStatusChange_request.json": "OperatingStatusChange_request"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "source": "tmforum-apis/TMF637_ProductInventory @ TMF637-ProductInventory-v5.0.0.oas.yaml",
+  "license": "Apache-2.0",
+  "spec_version": "5.0.0",
+  "examples": {
+    "RetrieveProduct1_response.json": "RetrieveProduct1_response",
+    "RetrieveProduct2_response.json": "RetrieveProduct2_response",
+    "RetrieveProductByList_response.json": "RetrieveProductByList_response",
+    "RetrieveProductByListwithFieldsSelection_response.json": "RetrieveProductByListwithFieldsSelection_response",
+    "CreateProduct_request.json": "CreateProduct_request",
+    "CreateProduct_response.json": "CreateProduct_response",
+    "CreateProduct_with_intent_request.json": "CreateProduct_with_intent_request",
+    "CreateProduct_with_intent_response.json": "CreateProduct_with_intent_response",
+    "Product_partialupdate_example_application_json_request.json": "Product_partialupdate_example_application_json_request",
+    "Product_partialupdate_example_application_json_response.json": "Product_partialupdate_example_application_json_response",
+    "Product_partialupdate_example_application_merge_patch_json_request.json": "Product_partialupdate_example_application_merge_patch_json_request",
+    "Product_partialupdate_example_application_merge_patch_json_response.json": "Product_partialupdate_example_application_merge_patch_json_response",
+    "Product_partialupdate_example_application_json_patch_json_request.json": "Product_partialupdate_example_application_json_patch_json_request",
+    "Product_partialupdate_example_application_json_patch_json_response.json": "Product_partialupdate_example_application_json_patch_json_response",
+    "Product_partialupdate_example_application_json_patch_query_json_request.json": "Product_partialupdate_example_application_json_patch_query_json_request",
+    "Product_partialupdate_example_application_json_patch_query_json_response.json": "Product_partialupdate_example_application_json_patch_query_json_response",
+    "ProductCreateEvent_request.json": "ProductCreateEvent_request",
+    "ProductAttributeValueChangeEvent_request.json": "ProductAttributeValueChangeEvent_request",
+    "ProductStateChangeEvent_request.json": "ProductStateChangeEvent_request",
+    "ProductDeleteEvent_request.json": "ProductDeleteEvent_request",
+    "ProductBatchEvent_request.json": "ProductBatchEvent_request"
+  }
+}

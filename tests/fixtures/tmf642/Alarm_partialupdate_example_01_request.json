@@ -1,0 +1,22 @@
+[
+  {
+    "op": "replace",
+    "path": "/state",
+    "value": "updated"
+  },
+  {
+    "op": "replace",
+    "path": "/perceivedSeverity",
+    "value": "major"
+  },
+  {
+    "op": "replace",
+    "path": "/alarmChangedTime",
+    "value": "2019-07-03T03:32:24.715Z"
+  },
+  {
+    "op": "replace",
+    "path": "/alarmDetails",
+    "value": "voltage=95"
+  }
+]

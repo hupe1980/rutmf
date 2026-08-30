@@ -1,0 +1,22 @@
+[
+  {
+    "op": "replace",
+    "path": "/ackState",
+    "value": "acknowledged"
+  },
+  {
+    "op": "replace",
+    "path": "/ackSystemId",
+    "value": "ems-1"
+  },
+  {
+    "op": "replace",
+    "path": "/ackUserId",
+    "value": "bob@example.net"
+  },
+  {
+    "op": "replace",
+    "path": "/ackTime",
+    "value": "2019-07-03T03:33:12.623Z"
+  }
+]

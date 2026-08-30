@@ -1,0 +1,29 @@
+{
+  "source": "tmforum-apis/TMF678_CustomerBill @ TMF678-CustomerBill-v5.0.0.oas.yaml",
+  "license": "Apache-2.0",
+  "spec_version": "5.0.0",
+  "examples": {
+    "AppliedCustomerBillingRate_list_example_response.json": "AppliedCustomerBillingRate_list_example_response",
+    "AppliedCustomerBillingRate_retrieve_example_response.json": "AppliedCustomerBillingRate_retrieve_example_response",
+    "BillCycle_list_example_response.json": "BillCycle_list_example_response",
+    "BillCycle_retrieve_example_response.json": "BillCycle_retrieve_example_response",
+    "CustomerBillCreateEvent_request.json": "CustomerBillCreateEvent_request",
+    "CustomerBillOnDemandCreateEvent_request.json": "CustomerBillOnDemandCreateEvent_request",
+    "CustomerBillOnDemandStateChangeEvent_request.json": "CustomerBillOnDemandStateChangeEvent_request",
+    "CustomerBillOnDemand_create_example_request.json": "CustomerBillOnDemand_create_example_request",
+    "CustomerBillOnDemand_create_example_response.json": "CustomerBillOnDemand_create_example_response",
+    "CustomerBillOnDemand_list_example_response.json": "CustomerBillOnDemand_list_example_response",
+    "CustomerBillOnDemand_retrieve_example_response.json": "CustomerBillOnDemand_retrieve_example_response",
+    "CustomerBillStateChangeEvent_request.json": "CustomerBillStateChangeEvent_request",
+    "CustomerBill_list_example_response.json": "CustomerBill_list_example_response",
+    "CustomerBill_retrieve_example_response.json": "CustomerBill_retrieve_example_response",
+    "Customer_Bill_Update_Implied_Merge_request.json": "Customer_Bill_Update_Implied_Merge_request",
+    "Customer_Bill_Update_Implied_Merge_response.json": "Customer_Bill_Update_Implied_Merge_response",
+    "Customer_Bill_Update_JSON_Patch_Query_request.json": "Customer_Bill_Update_JSON_Patch_Query_request",
+    "Customer_Bill_Update_JSON_Patch_Query_response.json": "Customer_Bill_Update_JSON_Patch_Query_response",
+    "Customer_Bill_Update_JSON_Patch_request.json": "Customer_Bill_Update_JSON_Patch_request",
+    "Customer_Bill_Update_JSON_Patch_response.json": "Customer_Bill_Update_JSON_Patch_response",
+    "Customer_Bill_Update_Patch_Merge_request.json": "Customer_Bill_Update_Patch_Merge_request",
+    "Customer_Bill_Update_Patch_Merge_response.json": "Customer_Bill_Update_Patch_Merge_response"
+  }
+}

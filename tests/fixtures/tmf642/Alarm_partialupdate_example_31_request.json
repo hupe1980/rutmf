@@ -1,0 +1,7 @@
+[
+  {
+    "op": "replace",
+    "path": "/parentAlarm/name?id=556698533215846321",
+    "value": "Root cause"
+  }
+]

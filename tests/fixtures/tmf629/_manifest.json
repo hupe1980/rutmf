@@ -1,0 +1,23 @@
+{
+  "source": "tmforum-apis/TMF629_CustomerManagement",
+  "license": "Apache-2.0",
+  "spec_version": "5.0.1",
+  "examples": {
+    "Customer_list_example_response.json": "Customer_list_example_response",
+    "Customer_retrieve_example_response.json": "Customer_retrieve_example_response",
+    "Customer_Create_example_request.json": "Customer_Create_example_request",
+    "Customer_Create_example_response.json": "Customer_Create_example_response",
+    "Customer_Update_example_application_json_request.json": "Customer_Update_example_application-json__request",
+    "Customer_Update_example_application_json_response.json": "Customer_Update_example_application-json__response",
+    "Customer_Update_example_Merge_request.json": "Customer_Update_example_Merge__request",
+    "Customer_Update_example_Merge_response.json": "Customer_Update_example_Merge__response",
+    "Customer_Update_example_JSON_PATCH_request.json": "Customer_Update_example_JSON-PATCH__request",
+    "Customer_Update_example_JSON_PATCH_response.json": "Customer_Update_example_JSON-PATCH__response",
+    "Customer_Update_example_JSON_PATCH_QUERY_request.json": "Customer_Update_example_JSON-PATCH-QUERY__request",
+    "Customer_Update_example_JSON_PATCH_QUERY_response.json": "Customer_Update_example_JSON-PATCH-QUERY__response",
+    "Create_Cusomter_Notification_Event_request.json": "Create_Cusomter_Notification_Event_request",
+    "Delete_Cusomter_Notification_Event_request.json": "Delete_Cusomter_Notification_Event_request",
+    "Customer_Attribute_Value_Change_Notification_Event_request.json": "Customer_Attribute_Value_Change_Notification_Event_request",
+    "Customer_State_Change_Notification_Event_request.json": "Customer_State_Change_Notification_Event_request"
+  }
+}

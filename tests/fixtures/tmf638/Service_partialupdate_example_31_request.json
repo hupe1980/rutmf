@@ -1,0 +1,33 @@
+{
+  "state": "inactive",
+  "supportingService": [
+    {
+      "href": "https://mycsp.com:8080/tmf-api/serviceInventory/v5/service/6500",
+      "id": "6500",
+      "@type": "ServiceRef",
+      "@referredType": "Service"
+    }
+  ],
+  "serviceRelationship": [
+    {
+      "relationshipType": "DependentOn",
+      "ServiceRelationshipCharacteristic": [
+        {
+          "id": "126",
+          "name": "CrossRef",
+          "value": "44-11-h",
+          "valueType": "string",
+          "@type": "StringCharacteristic"
+        }
+      ],
+      "service": {
+        "href": "https://mycsp.com:8080/tmf-api/serviceInventory/v5/service/5656",
+        "id": "5656",
+        "@type": "ServiceRef",
+        "@referredType": "Service"
+      },
+      "@type": "ServiceRelationship"
+    }
+  ],
+  "@type": "Service"
+}

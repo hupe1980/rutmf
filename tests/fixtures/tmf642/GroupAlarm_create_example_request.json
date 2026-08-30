@@ -1,0 +1,15 @@
+{
+  "@type": "GroupAlarm",
+  "sourceSystemId": "ems-1",
+  "alarmChangedTime": "2019-07-03T03:32:52.744Z",
+  "parentAlarm": {
+    "@type": "AlarmRef",
+    "id": "8675309"
+  },
+  "correlatedAlarm": [
+    {
+      "@type": "AlarmRef",
+      "id": "8675399"
+    }
+  ]
+}

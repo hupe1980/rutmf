@@ -1,0 +1,19 @@
+{% extends "docs.html" %}
+
+{% block docs_body %}
+<header class="page-header">
+  <h1>{{ section.title }}</h1>
+  {%- if section.description %}<p class="lede">{{ section.description }}</p>{% endif %}
+</header>
+
+{{ section.content | safe }}
+
+<div class="grid grid-2 section-index">
+  {%- for p in section.pages %}
+  <a class="card card-link" href="{{ p.permalink | safe }}">
+    <h3>{{ p.title }}</h3>
+    {%- if p.description %}<p>{{ p.description }}</p>{% endif %}
+  </a>
+  {%- endfor %}
+</div>
+{% endblock docs_body %}

@@ -1,0 +1,41 @@
+{
+  "correlationId": "bc449e2c-34c0",
+  "description": "AlarmAttributeValueChangeEvent illustration",
+  "domain": "Commercial",
+  "eventId": "441f-9380-4858c53114c2",
+  "eventTime": "2022-08-25T12:20:19.535Z",
+  "eventType": "AlarmAttributeValueChangeEvent",
+  "priority": "1",
+  "timeOccurred": "2022-08-25T12:20:19.184Z",
+  "title": "AlarmAttributeValueChangeEvent",
+  "event": {
+    "alarm": {
+      "href": "http://servername/alarm/8675309",
+      "id": "8675309",
+      "@type": "Alarm",
+      "comment": [
+        {
+          "@type": "Comment",
+          "userId": "bob@example.net",
+          "systemId": "ems-1",
+          "time": "2019-07-03T03:37:33.827Z",
+          "comment": "Dispatched"
+        }
+      ]
+    }
+  },
+  "reportingSystem": {
+    "id": "815",
+    "name": "APP-663",
+    "@type": "ReportingResource",
+    "@referredType": "LogicalResource"
+  },
+  "source": {
+    "id": "103",
+    "name": "APP-57",
+    "@type": "ReportingResource",
+    "@referredType": "LogicalResource"
+  },
+  "@baseType": "Event",
+  "@type": "AlarmAttributeValueChangeEvent"
+}

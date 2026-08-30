@@ -1,0 +1,28 @@
+{% extends "docs.html" %}
+
+{% block docs_body %}
+<header class="page-header">
+  <h1>{{ page.title }}</h1>
+  {%- if page.description %}<p class="lede">{{ page.description }}</p>{% endif %}
+</header>
+
+{{ page.content | safe }}
+
+{#- Sequential navigation. Zola orders a section's pages by its `sort_by`, and
+    exposes each page's neighbours, so the order here follows the sidebar
+    without a second list to keep in step. -#}
+<nav class="pager" aria-label="Documentation pages">
+  {%- if page.lighter %}
+  <a class="pager-prev" href="{{ page.lighter.permalink | safe }}">
+    <span class="pager-label">Previous</span>
+    <span class="pager-title">{{ page.lighter.title }}</span>
+  </a>
+  {%- endif %}
+  {%- if page.heavier %}
+  <a class="pager-next" href="{{ page.heavier.permalink | safe }}">
+    <span class="pager-label">Next</span>
+    <span class="pager-title">{{ page.heavier.title }}</span>
+  </a>
+  {%- endif %}
+</nav>
+{% endblock docs_body %}

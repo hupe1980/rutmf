@@ -1,0 +1,16 @@
+{
+  "@type": "UnAckAlarm",
+  "ackSystemId": "ems-1",
+  "ackUserId": "bob@example.net",
+  "ackTime": "2019-07-03T03:38:06.890Z",
+  "alarmPattern": [
+    {
+      "@type": "AlarmRef",
+      "id": "8675309"
+    },
+    {
+      "@type": "AlarmRef",
+      "id": "8675399"
+    }
+  ]
+}

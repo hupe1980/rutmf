@@ -1,0 +1,104 @@
+{#- Shared chrome for every page under /docs/: the sidebar, the search box and
+    the on-page table of contents. `section.html` and `page.html` both extend
+    this so the two cannot drift apart. -#}
+{% extends "base.html" %}
+
+{% block content %}
+{% set docs = get_section(path="docs/_index.md") %}
+<div class="docs-layout wrap">
+
+  <aside class="docs-sidebar" aria-label="Documentation">
+    <form class="search" role="search" onsubmit="return false">
+      <label class="visually-hidden" for="docs-search">Search the documentation</label>
+      <input id="docs-search" type="search" placeholder="Search docs…" autocomplete="off"
+             spellcheck="false" aria-describedby="search-hint">
+      <p id="search-hint" class="visually-hidden">Results appear as you type.</p>
+      <ul id="search-results" class="search-results" hidden></ul>
+    </form>
+
+    <nav aria-label="Documentation sections">
+      <ol class="toc-list">
+        {%- for p in docs.pages %}
+        <li{% if is_page and page.permalink == p.permalink %} class="current" aria-current="page"{% endif %}>
+          <a href="{{ p.permalink | safe }}">{{ p.title }}</a>
+        </li>
+        {%- endfor %}
+      </ol>
+    </nav>
+  </aside>
+
+  <article class="docs-content">
+    {% block docs_body %}{% endblock docs_body %}
+  </article>
+
+  {%- if is_page and page.toc | length > 1 %}
+  <nav class="docs-onthispage" aria-label="On this page">
+    <p class="onthispage-title">On this page</p>
+    <ul>
+      {%- for h in page.toc %}
+      <li><a href="#{{ h.id }}">{{ h.title }}</a>
+        {%- if h.children %}
+        <ul>{% for c in h.children %}<li><a href="#{{ c.id }}">{{ c.title }}</a></li>{% endfor %}</ul>
+        {%- endif %}
+      </li>
+      {%- endfor %}
+    </ul>
+  </nav>
+  {%- endif %}
+</div>
+
+<script>
+// Docs search. Zola emits an elasticlunr JSON index at build time; matching a
+// few hundred short documents is a substring scan, so the elasticlunr runtime
+// would be a dependency doing work the browser already does quickly.
+(function () {
+  var input = document.getElementById('docs-search');
+  var list = document.getElementById('search-results');
+  if (!input || !list) return;
+
+  var docs = null, loading = false;
+
+  function load() {
+    if (docs || loading) return;
+    loading = true;
+    fetch('{{ get_url(path="search_index.en.json", trailing_slash=false) | safe }}')
+      .then(function (r) { return r.json(); })
+      .then(function (raw) {
+        var store = raw.documentStore ? raw.documentStore.docs : {};
+        docs = Object.keys(store).map(function (id) {
+          var d = store[id];
+          return { id: d.id || id, title: d.title || '', body: (d.body || '').toLowerCase() };
+        });
+      })
+      .catch(function () { docs = []; });
+  }
+
+  input.addEventListener('focus', load);
+
+  input.addEventListener('input', function () {
+    var q = input.value.trim().toLowerCase();
+    if (!docs || q.length < 2) { list.hidden = true; list.textContent = ''; return; }
+
+    var hits = docs.filter(function (d) {
+      return d.title.toLowerCase().indexOf(q) !== -1 || d.body.indexOf(q) !== -1;
+    }).slice(0, 8);
+
+    list.textContent = '';
+    hits.forEach(function (d) {
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = d.id;
+      a.textContent = d.title;
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+    list.hidden = hits.length === 0;
+  });
+
+  // Escape closes the results without clearing what was typed.
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { list.hidden = true; }
+  });
+})();
+</script>
+{% endblock content %}

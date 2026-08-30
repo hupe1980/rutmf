@@ -1,0 +1,20 @@
+{
+  "id": "1038",
+  "@type": "AckAlarm",
+  "href": "/alarmManagement/v5/ackAlarm/1038",
+  "ackSystemId": "ems-1",
+  "ackUserId": "bob@example.net",
+  "ackTime": "2019-07-03T03:33:12.623Z",
+  "alarmPattern": [
+    {
+      "@type": "Alarm",
+      "id": "8675309"
+    },
+    {
+      "@type": "Alarm",
+      "id": "8675399"
+    }
+  ],
+  "state": "inProgress",
+  "ackedAlarm": []
+}

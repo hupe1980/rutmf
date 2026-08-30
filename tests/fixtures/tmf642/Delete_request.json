@@ -1,0 +1,31 @@
+{
+  "correlationId": "a15a9002-cd5f",
+  "description": "AlarmDeleteEvent illustration",
+  "domain": "Commercial",
+  "eventId": "4e92-b13d-4e9a81761f13",
+  "eventTime": "2022-08-25T12:20:19.557Z",
+  "eventType": "AlarmDeleteEvent",
+  "priority": "3",
+  "timeOccurred": "2022-08-25T12:20:17.467Z",
+  "title": "AlarmDeleteEvent",
+  "event": {
+    "alarm": {
+      "id": "8675309",
+      "href": "http://servername/alarm/8675309",
+      "@type": "Alarm"
+    }
+  },
+  "reportingSystem": {
+    "id": "815",
+    "name": "APP-663",
+    "@type": "ReportingResource",
+    "@referredType": "LogicalResource"
+  },
+  "source": {
+    "id": "103",
+    "name": "APP-57",
+    "@type": "ReportingResource",
+    "@referredType": "LogicalResource"
+  },
+  "@type": "AlarmDeleteEvent"
+}
