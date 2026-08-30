@@ -208,8 +208,43 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
+
+      # `cargo-semver-checks` compares the working tree against the last version
+      # on crates.io. Before the first publish there is no baseline and it exits
+      # 101, which puts a red job on every pull request for a reason no author
+      # can act on. Skipping until there is something to compare against turns
+      # itself off — the check starts running on its own after the first release.
+      - id: baseline
+        name: Is there a published baseline?
+        run: |
+          set -euo pipefail
+          crate=$(grep -m1 -oP '^name = "\K[^"]+' Cargo.toml)
+          # The sparse index nests by name length: 1/a, 2/ab, 3/a/abc, ab/cd/abcd.
+          case ${#crate} in
+            1) path="1/$crate" ;;
+            2) path="2/$crate" ;;
+            3) path="3/${crate:0:1}/$crate" ;;
+            *) path="${crate:0:2}/${crate:2:2}/$crate" ;;
+          esac
+
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "https://index.crates.io/$path" || echo 000)
+          case "$code" in
+            200) echo "published=true" >> "$GITHUB_OUTPUT" ;;
+            404)
+              echo "published=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::$crate is not on crates.io yet, so there is no baseline to compare against"
+              ;;
+            *)
+              echo "published=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::could not reach the crates.io index (HTTP $code); skipping the semver check"
+              ;;
+          esac
+
       - uses: dtolnay/rust-toolchain@stable
+        if: steps.baseline.outputs.published == 'true'
       - uses: Swatinem/rust-cache@v2
+        if: steps.baseline.outputs.published == 'true'
       - uses: obi1kenobi/cargo-semver-checks-action@v2
+        if: steps.baseline.outputs.published == 'true'
         with:
           feature-group: all-features
