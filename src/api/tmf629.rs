@@ -7,22 +7,41 @@ use crate::customer::{Customer, CustomerCreate, CustomerUpdate};
 
 use super::client::TmfClient;
 use super::error::Result;
-use super::hub::HubOps;
+use super::hub::{HubLookup, HubOps};
 use super::page::{Page, PageRequest, PageStream, paginate};
 use super::patch::Patch;
 use super::query::Query;
 use super::resource_ops;
 use super::transport::Transport;
+use super::{Api, Collection, Operation};
 
 /// The conventional API root, appended to a host to form the base URL.
 pub const API_PATH: &str = "tmf-api/customerManagement/v5";
 
 /// The specification version this client was modelled from.
 ///
-/// The nine covered APIs are not all on the same patch release, so this is
+/// The covered APIs are not all on the same patch release, so this is
 /// per-API rather than a single crate-wide constant. Asserted against the
 /// vendored corpus by `every_client_reports_the_version_it_was_modelled_from`.
 pub const SPEC_VERSION: &str = "5.0.1";
+
+/// What TMF629 declares: every collection, including `hub`, with the
+/// operations on each.
+///
+/// [`TmfHandler`](crate::server::TmfHandler) refuses anything else, and
+/// `tests/coverage.rs` holds this equal to the specification document.
+pub const API: Api = Api::new(
+    "TMF629",
+    API_PATH,
+    SPEC_VERSION,
+    &[
+        Collection::crud("customer"),
+        Collection::new(
+            "hub",
+            &[Operation::Create, Operation::Retrieve, Operation::Delete],
+        ),
+    ],
+);
 
 const CUSTOMERS: &str = "customer";
 
@@ -99,3 +118,5 @@ impl HubOps for CustomerClient {
         &self.inner
     }
 }
+
+impl HubLookup for CustomerClient {}

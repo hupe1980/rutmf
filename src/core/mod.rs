@@ -78,6 +78,7 @@ mod refs;
 #[cfg(feature = "schemars")]
 mod schema;
 mod state;
+mod time;
 mod value;
 
 pub use attachment::{Attachment, ExternalIdentifier};
@@ -97,14 +98,16 @@ pub use refs::{
     AssociationSpecification, BillCycleSpecification, BillingAccount, Channel, ConnectionPoint,
     ConnectionPointSpecification, Constraint, EndpointSpecification, FinancialAccount,
     GeographicAddress, Intent, IntentSpecification, MarketSegment, Payment, PaymentMethod,
-    PermissionSpecificationSet, Place, Policy, ProductOfferingQualification, Promotion, Quote,
-    Schedule, ServiceCandidate, ServiceLevelAgreement, ServiceSpecification, Threshold,
+    PermissionSpecificationSet, Place, Policy, ProductOfferingQualification,
+    ProductUsageSpecification, Promotion, Quote, Schedule, ServiceCandidate, ServiceLevelAgreement,
+    ServiceSpecification, ServiceUsage, Threshold,
 };
 pub use state::ItemAction;
+pub use time::{Timestamp, TimestampError};
 pub use value::{
     CreditProfile, Duration, FeatureRelationshipType, Money, Note, PlaceRefOrValue, Price,
     Quantity, RelatedPlace, TaskState, TaxDefinition, TaxExemptionCertificate, TaxItem, TimePeriod,
-    Timestamp, decimal_opt,
+    decimal_opt,
 };
 
 /// A body that a `PATCH` may carry as a whole-resource merge.

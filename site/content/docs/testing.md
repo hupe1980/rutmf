@@ -31,6 +31,16 @@ assert_eq!(page.total_count, Some(1));
 
 No socket, no port allocation, no teardown.
 
+`MockTmfServer::new()` serves any collection with every operation, so one mock
+can stand in for several APIs in the same test. To test against exactly what one
+API declares — and see the `405` a real server would send for an operation it
+does not — scope it:
+
+```rust
+let server = MockTmfServer::for_api(&tmf678::API);
+// POST /customerBill is not declared by TMF678: 405, Allow: GET.
+```
+
 ## What it actually implements
 
 Everything [the server layer](@/docs/serving-an-api.md) does, because it *is*
@@ -108,7 +118,7 @@ let base_url = format!("http://127.0.0.1:{port}/tmf-api/productCatalogManagement
 
 let app = axum::Router::new().nest(
     "/tmf-api/productCatalogManagement/v5",
-    rutmf::server::router(TmfHandler::new(&base_url, store)),
+    rutmf::server::router(TmfHandler::new(&tmf620::API, &base_url, store)),
 );
 tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
@@ -124,7 +134,7 @@ oracle.
 The crate is verified by three suites that are blind in different places, and
 all run on every commit:
 
-**Against the official examples.** All **591** `components.examples` values are
+**Against the official examples.** All **610** `components.examples` values are
 vendored verbatim from the TM Forum specification repositories, and every one
 must parse and round-trip by value. A separate test fails if any fixture falls
 outside the classification rules, so a newly vendored example cannot be a
@@ -132,21 +142,21 @@ silently untested one.
 
 **Against the schemas.** Round-tripping proves nothing about *coverage* — an
 unknown member survives in `extensions` whether or not the model understands it.
-So a second suite reads the OpenAPI documents and checks **215 Rust types against
-462 v5 schemas**: that every specified member has a typed field and every typed
+So a second suite reads the OpenAPI documents and checks **219 Rust types against
+490 v5 schemas**: that every specified member has a typed field and every typed
 field is specified, that each member has the shape the spec gives it, that
 enumerations admit exactly the specified values, that requiredness matches, that
 discriminators are the values each schema's own `discriminator.mapping` names,
 that every typed reference names the class the specification declares, that a
 member the spec gives a closed vocabulary is a Rust `enum` rather than a
-`String`, that a `date-time` member is a `Timestamp`, and that the fourteen
+`String`, that a `date-time` member is a `Timestamp`, and that the fifteen
 specifications do not disagree about a shared type.
 
 **Against the schemas, in the other direction.** All of the above asks "does
 every Rust type match a schema?", which says nothing about completeness — a crate
 modelling three schemas out of three thousand passes it. So
 `every_declared_schema_is_modelled_or_excused` asks the reverse: every schema the
-fourteen documents declare must be mapped to a Rust type, absorbed into a mapped
+fifteen documents declare must be mapped to a Rust type, absorbed into a mapped
 schema through `allOf`, handled generically (an event, a `…Ref`, a write
 variant), paired in the enumeration table, or listed in `NOT_MODELLED` **with the
 reason it is not modelled**. The list is checked both ways, so an excuse for a
@@ -154,7 +164,7 @@ schema TM Forum has since removed fails too.
 
 What that leaves excused is the value arms of `PlaceRefOrValue` (TMF673/674/675
 geography and its GeoJSON geometry) and `IntentRefOrValue` (TMF921) — APIs
-outside the fourteen, where the crate models the *reference* arm and a value arm
+outside the fifteen, where the crate models the *reference* arm and a value arm
 round-trips through `extensions`. Everything reachable from a modelled resource
 by a typed path is modelled.
 
@@ -166,8 +176,8 @@ a library is wrong in ways nothing else notices:
   cannot grow a `create_customer_bill` against a `POST` that does not exist;
 - every query parameter a specification declares can be built with `Query`, and
   only `fields`, `offset` and `limit` are claimed to be universal — `sort`,
-  `filter`, `after` and `before` are declared by TMF621 and TMF639 alone;
-- every one of the **157** `/listener/…` endpoints decomposes into a collection
+  `filter`, `after` and `before` are declared by TMF621, TMF635 and TMF639 alone;
+- every one of the **160** `/listener/…` endpoints decomposes into a collection
   that API serves plus an `EventKind` the crate names, so an event it can neither
   subscribe to nor raise is a failure rather than a silence;
 - the collections spelling a lifecycle move `…StatusChangeEvent` are the ones the
@@ -176,8 +186,8 @@ a library is wrong in ways nothing else notices:
 
 **Against a running server.** The first two check documents; a document cannot
 tell you whether the code answers a request correctly. So a third suite reads
-each vendored specification, discovers the collections and methods it declares,
-and drives the server layer over a real socket for **all 43** of them —
+each pinned specification, discovers the collections and methods it declares,
+and drives the server layer over a real socket for **all 44** of them —
 asserting the status codes, the `X-Total-Count`/`X-Result-Count` headers, the
 `ETag`, and that a missing resource is a `404` carrying a TMF630 error body.
 

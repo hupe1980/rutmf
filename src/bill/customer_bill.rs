@@ -375,6 +375,83 @@ tmf_value! {
     }
 }
 
+/// The name of the characteristic that carries a bill line's usage.
+///
+/// TMF678 gives [`AppliedCustomerBillingRate`] no member for the usage it charges
+/// for, and TMF635 v5 declares no `ProductUsageRef`. So the link is a convention,
+/// written down once: one `ObjectArrayCharacteristic` called `productUsage`,
+/// whose value is a list of generic `EntityRef`s naming `ProductUsage`. Any v5
+/// consumer can read it; [`AppliedCustomerBillingRate::product_usages`] and
+/// [`AppliedCustomerBillingRate::with_product_usages`] read and write it.
+#[cfg(feature = "usage")]
+#[cfg_attr(docsrs, doc(cfg(feature = "usage")))]
+pub const PRODUCT_USAGE_CHARACTERISTIC: &str = "productUsage";
+
+#[cfg(feature = "usage")]
+#[cfg_attr(docsrs, doc(cfg(feature = "usage")))]
+impl AppliedCustomerBillingRate {
+    /// The usage records this charge was rated from — "why this amount?".
+    ///
+    /// Reads the [`PRODUCT_USAGE_CHARACTERISTIC`] convention. It never fails:
+    /// a characteristic whose value is not a list, an entry without an `id`, or
+    /// an entry naming some other `@referredType` is skipped, so a bill line from
+    /// a server that does not follow the convention simply has no usage.
+    ///
+    /// ```
+    /// use rutmf::bill::AppliedCustomerBillingRate;
+    /// use rutmf::core::Ref;
+    ///
+    /// let line = AppliedCustomerBillingRate::builder()
+    ///     .name("Roaming data")
+    ///     .build()
+    ///     .with_product_usages([Ref::new("U-1"), Ref::new("U-2")]);
+    ///
+    /// let ids: Vec<_> = line.product_usages().into_iter().map(|u| u.id).collect();
+    /// assert_eq!(ids, ["U-1", "U-2"]);
+    /// ```
+    #[must_use]
+    pub fn product_usages(&self) -> Vec<Ref<crate::usage::ProductUsage>> {
+        self.characteristic
+            .iter()
+            .flatten()
+            .filter(|c| c.name.as_deref() == Some(PRODUCT_USAGE_CHARACTERISTIC))
+            .filter_map(|c| c.value.as_ref()?.as_array())
+            .flatten()
+            .filter_map(|entry| {
+                let usage: Ref<crate::usage::ProductUsage> =
+                    serde_json::from_value(entry.clone()).ok()?;
+                let names_usage = usage
+                    .referred_type
+                    .as_deref()
+                    .is_none_or(|t| t == "ProductUsage");
+                (names_usage && !usage.id.is_empty()).then_some(usage)
+            })
+            .collect()
+    }
+
+    /// Records the usage records this charge was rated from, replacing any the
+    /// line already named under [`PRODUCT_USAGE_CHARACTERISTIC`].
+    ///
+    /// Other characteristics are left as they were.
+    #[must_use]
+    pub fn with_product_usages(
+        mut self,
+        usages: impl IntoIterator<Item = Ref<crate::usage::ProductUsage>>,
+    ) -> Self {
+        let refs: Vec<serde_json::Value> = usages
+            .into_iter()
+            .filter_map(|usage| serde_json::to_value(usage).ok())
+            .collect();
+        let characteristics = self.characteristic.get_or_insert_with(Vec::new);
+        characteristics.retain(|c| c.name.as_deref() != Some(PRODUCT_USAGE_CHARACTERISTIC));
+        characteristics.push(Characteristic::new(
+            PRODUCT_USAGE_CHARACTERISTIC,
+            serde_json::Value::Array(refs),
+        ));
+        self
+    }
+}
+
 tmf_entity!(
     CustomerBill,
     CustomerBillOnDemand,
@@ -386,6 +463,50 @@ tmf_patch_body!(CustomerBillUpdate);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// product-usage/SR-003: the reader is total — anything malformed is
+    /// skipped, never a failure — and returns only references naming
+    /// `ProductUsage`.
+    #[cfg(feature = "usage")]
+    #[test]
+    fn a_bill_line_reads_only_well_formed_usage_references() {
+        let line: AppliedCustomerBillingRate = serde_json::from_value(serde_json::json!({
+            "@type": "AppliedCustomerBillingRate",
+            "characteristic": [
+                {"@type": "ObjectCharacteristic", "name": "productUsage", "value": {"id": "lonely"}},
+                {"@type": "StringCharacteristic", "name": "productUsage", "value": "U-0"},
+                {"@type": "ObjectArrayCharacteristic", "name": "productUsage", "value": [
+                    {"@type": "EntityRef", "@referredType": "ProductUsage", "id": "U-1"},
+                    {"@type": "EntityRef", "@referredType": "Product", "id": "P-9"},
+                    {"@type": "EntityRef", "@referredType": "ProductUsage"},
+                    {"@type": "EntityRef", "id": ""},
+                    "U-2",
+                    42,
+                    {"id": "U-3"}
+                ]},
+                {"@type": "StringCharacteristic", "name": "zone", "value": "EU"}
+            ]
+        }))
+        .unwrap();
+        let ids: Vec<String> = line.product_usages().into_iter().map(|u| u.id).collect();
+        assert_eq!(ids, ["U-1", "U-3"]);
+
+        // Writing replaces the convention's characteristic and keeps the rest.
+        let rewritten = line.with_product_usages([Ref::new("U-7")]);
+        let names: Vec<_> = rewritten
+            .characteristic
+            .iter()
+            .flatten()
+            .filter_map(|c| c.name.as_deref())
+            .collect();
+        assert_eq!(names, ["zone", "productUsage"]);
+        let json = serde_json::to_value(&rewritten).unwrap();
+        let usage_link = &json["characteristic"][1];
+        assert_eq!(usage_link["@type"], "ObjectArrayCharacteristic");
+        assert_eq!(usage_link["value"][0]["@type"], "EntityRef");
+        assert_eq!(usage_link["value"][0]["@referredType"], "ProductUsage");
+        assert_eq!(rewritten.product_usages()[0].id, "U-7");
+    }
 
     #[test]
     fn a_bill_patch_can_move_the_state_and_nothing_else() {

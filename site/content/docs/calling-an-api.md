@@ -49,8 +49,9 @@ Attribute filtering is what TMF630 describes and what forty of the forty-one
 collections use. Three do something else, and `Query` can express it:
 
 ```rust
-// TMF621 and TMF639 declare cursor pagination on `troubleTicket`,
-// `troubleTicketSpecification` and `resource` — and nothing else does.
+// TMF621, TMF635 and TMF639 declare cursor pagination on `troubleTicket`,
+// `troubleTicketSpecification`, `productUsage`, TMF635's `exportJob` and
+// `resource` — and nothing else does.
 let q = Query::new().after("eyJpZCI6IjQyIn0").limit(50);
 
 // The same three declare `filter` as a JSONPath expression, which is a
@@ -389,9 +390,11 @@ data, so a webhook handler or a queue consumer gets it without pulling in an
 HTTP client.
 
 Note what v5 does **not** offer. There is no `GET /hub`, so **no API lets you
-list your subscriptions**, and only TMF621, TMF629, TMF639, TMF642 and TMF679 let
-you read one back with `GET /hub/{id}`. Keep the id you were given at
-registration — it is the only handle on the subscription you will get.
+list your subscriptions**, and only TMF621, TMF629, TMF635, TMF639, TMF642 and
+TMF679 let you read one back with `GET /hub/{id}`. Only those six clients implement
+`HubLookup::get_listener`, so on the other nine the call does not compile rather
+than failing with a `405`. Keep the id you were given at registration — it is the
+only handle on the subscription you will get.
 
 Generic Event Management (TMF688) is still v4-only, so what v5 ships is this
 per-API hub rather than a central event bus.
@@ -404,13 +407,13 @@ miss:
 
 | Kind | Declared by | Why it exists |
 |---|---|---|
-| `OperatingStatusChange` | TMF638 | `Service` carries both a `state` and an `operatingStatus`, and declares a listener for each — the only resource of the fourteen that separates an operational move from an administrative one |
+| `OperatingStatusChange` | TMF638 | `Service` carries both a `state` and an `operatingStatus`, and declares a listener for each — the only resource of the fifteen that separates an operational move from an administrative one |
 | `Batch` | TMF637 | `ProductBatchEvent` carries an *array* of products, so read it with `event.payload::<Vec<Product>>("product")` rather than `event.resource()` |
 
 A kind the crate does not know is an event nothing can subscribe to or raise, and
 the failure is silent at both ends: the hub registers happily against a name no
 server emits. So it is not a remembered list — `tests/coverage.rs` reads all
-**157** `/listener/…` paths out of the fourteen documents and fails unless each
+**160** `/listener/…` paths out of the fifteen documents and fails unless each
 decomposes into a collection that API serves plus a kind `EventKind` names.
 
 One upstream irregularity is recorded rather than papered over: TMF637 exposes
@@ -432,9 +435,31 @@ let request = bills.request_bill_on_demand(&on_demand).await?;
 bills.update_customer_bill("CB-778", &update).await?;   // state, and that is all
 ```
 
+Rated usage (TMF635) is the opposite case — every operation is declared — but a
+billing system rarely wants a rated record rewritten. Correct it by recording a
+new one and superseding the old, which is the only change the old one needs:
+
+```rust
+use rutmf::usage::{ProductUsageCreate, ProductUsageStatus, ProductUsageUpdate};
+
+let rated = usages.list_product_usages(&Query::new().filter("status", "rated")).await?;
+
+let corrected = usages.create_product_usage(
+    &ProductUsageCreate::builder()
+        .product(Ref::new("P-1"))
+        .usage_specification(Ref::new("voice-call"))   // both required on create
+        .usage_type("voice")
+        .build(),
+).await?;
+usages.update_product_usage(
+    "U-1",
+    &ProductUsageUpdate::builder().status(ProductUsageStatus::Superseded).build(),
+).await?;
+```
+
 This is checked, not just intended: `every_client_operation_is_declared_by_its_specification`
 reads each client's operation macros back out of the source and compares them
-against the vendored paths. A client cannot grow a method for an endpoint no
+against the declared paths. A client cannot grow a method for an endpoint no
 conformant server serves.
 
 ## Bringing your own transport

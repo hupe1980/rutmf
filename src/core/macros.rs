@@ -11,7 +11,7 @@
 //! three Rust types (see [`crate::core`]). Hand-written, each field costs four
 //! to six lines of identical serde and builder attributes, and every type ends
 //! with the same twenty-line `@type` / `@baseType` / `@schemaLocation` /
-//! `extensions` tail. Across fourteen APIs that is thousands of lines of
+//! `extensions` tail. Across fifteen APIs that is thousands of lines of
 //! near-duplicate code, and three copies of a field list do not stay in step.
 //!
 //! `tmf_struct!` collapses a field to a single line and derives the tail from

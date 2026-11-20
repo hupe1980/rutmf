@@ -17,7 +17,8 @@ use std::sync::Mutex;
 use serde_json::{Value, json};
 
 use rutmf::api::{
-    Conditional, Error, Query, ReqwestTransport, Tagged, Transport, tmf620::ProductCatalogClient,
+    Conditional, Error, Query, ReqwestTransport, Tagged, Transport, tmf620,
+    tmf620::ProductCatalogClient,
 };
 use rutmf::product::{ProductOfferingCreate, ProductOfferingUpdate};
 use rutmf::server::{Matched, ResourceStore, Selection, StoreError, StoreResult, TmfHandler};
@@ -98,7 +99,7 @@ impl ResourceStore for Catalog {
 
 /// Serves `store` on an ephemeral port and returns a client pointed at it.
 async fn serve(store: Catalog) -> ProductCatalogClient {
-    serve_handler(TmfHandler::new("", store)).await
+    serve_handler(TmfHandler::new(&tmf620::API, "", store)).await
 }
 
 /// Serves an already-configured handler, so a test can set a handler option.
@@ -343,7 +344,7 @@ async fn a_store_may_answer_202_for_an_asynchronous_write() {
     let base_url = format!("http://127.0.0.1:{port}/tmf-api/productCatalogManagement/v5");
     let app = axum::Router::new().nest(
         "/tmf-api/productCatalogManagement/v5",
-        rutmf::server::router(TmfHandler::new(&base_url, Queueing)),
+        rutmf::server::router(TmfHandler::new(&tmf620::API, &base_url, Queueing)),
     );
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
@@ -411,7 +412,11 @@ async fn selection_is_what_the_store_receives() {
         }
     }
 
-    let handler = TmfHandler::new("http://host/tmf-api/v5", Recording(Mutex::new(None)));
+    let handler = TmfHandler::new(
+        &tmf620::API,
+        "http://host/tmf-api/v5",
+        Recording(Mutex::new(None)),
+    );
     let mut request =
         rutmf::api::TmfRequest::new(http::Method::GET, "http://host/tmf-api/v5/productOffering");
     request.query = BTreeMap::from([
@@ -794,7 +799,8 @@ async fn a_malformed_paging_parameter_is_refused_rather_than_ignored() {
 /// An unbounded collection request is bounded when the deployment says so.
 #[tokio::test]
 async fn a_page_cap_bounds_a_request_that_named_no_limit() {
-    let client = serve_handler(TmfHandler::new("", seeded(50)).with_max_page_size(10)).await;
+    let client =
+        serve_handler(TmfHandler::new(&tmf620::API, "", seeded(50)).with_max_page_size(10)).await;
 
     // No `limit` at all: without the cap this is all fifty.
     let page = client
@@ -836,7 +842,8 @@ async fn a_page_cap_bounds_a_request_that_named_no_limit() {
 async fn a_capped_page_still_streams_to_the_end() {
     use futures::StreamExt as _;
 
-    let client = serve_handler(TmfHandler::new("", seeded(25)).with_max_page_size(4)).await;
+    let client =
+        serve_handler(TmfHandler::new(&tmf620::API, "", seeded(25)).with_max_page_size(4)).await;
 
     let all: Vec<_> = client
         .stream_product_offerings(Query::new().limit(50))
@@ -853,4 +860,196 @@ async fn a_capped_page_still_streams_to_the_end() {
         .expect("the list succeeds");
     assert_eq!(page.items.len(), 4);
     assert!(page.partial, "the server marked it a partial collection");
+}
+
+/// A store that writes down every call it receives and serves every
+/// collection — the most permissive store there is, so anything refused below
+/// was refused by the handler.
+#[derive(Default)]
+struct Spy {
+    calls: Mutex<Vec<String>>,
+}
+
+impl Spy {
+    fn record(&self, call: String) {
+        self.calls.lock().unwrap().push(call);
+    }
+    fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+#[async_trait::async_trait]
+impl ResourceStore for Spy {
+    async fn has_collection(&self, collection: &str) -> bool {
+        self.record(format!("has_collection {collection}"));
+        true
+    }
+    async fn list(&self, collection: &str, _s: &Selection) -> StoreResult<Matched> {
+        self.record(format!("list {collection}"));
+        Ok(Matched::complete(Vec::new()))
+    }
+    async fn get(&self, collection: &str, id: &str) -> StoreResult<Option<Value>> {
+        self.record(format!("get {collection}/{id}"));
+        Ok(Some(
+            json!({"id": id, "state": "sent", "@type": "CustomerBill"}),
+        ))
+    }
+    async fn create(&self, collection: &str, resource: Value) -> StoreResult<Value> {
+        self.record(format!("create {collection}"));
+        Ok(resource)
+    }
+    async fn replace(&self, collection: &str, id: &str, r: Value) -> StoreResult<Option<Value>> {
+        self.record(format!("replace {collection}/{id}"));
+        Ok(Some(r))
+    }
+    async fn delete(&self, collection: &str, id: &str) -> StoreResult<bool> {
+        self.record(format!("delete {collection}/{id}"));
+        Ok(true)
+    }
+}
+
+/// Counts what the handler hands to the notifier.
+#[derive(Clone, Default)]
+struct Counted(std::sync::Arc<Mutex<usize>>);
+
+#[async_trait::async_trait]
+impl rutmf::server::Notifier for Counted {
+    async fn notify(&self, _l: &rutmf::server::Listener, _t: &str, _e: &Value) {
+        *self.0.lock().unwrap() += 1;
+    }
+}
+
+fn request(method: http::Method, url: &str) -> rutmf::api::TmfRequest {
+    let mut request = rutmf::api::TmfRequest::new(method, url);
+    request.headers.insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/json"),
+    );
+    request.body = Some(bytes::Bytes::from_static(br#"{"@type":"CustomerBill"}"#));
+    request
+}
+
+/// An undeclared write is refused before the store or the notifier hears of
+/// it: no store call at all, so nothing is written, no precondition is
+/// evaluated and no event can be raised.
+///
+/// declared-operations/SR-002
+#[cfg(feature = "api-tmf678")]
+#[tokio::test]
+async fn an_undeclared_write_reaches_neither_the_store_nor_a_subscriber() {
+    use rutmf::api::tmf678;
+    let notified = Counted::default();
+    let handler = TmfHandler::for_host(&tmf678::API, "http://host", Spy::default())
+        .with_notifier(notified.clone());
+    let base = handler.base_url().to_owned();
+
+    for (method, path) in [
+        (http::Method::DELETE, "customerBill/B1"),
+        (http::Method::POST, "customerBill"),
+        (http::Method::POST, "appliedCustomerBillingRate"),
+        (http::Method::PATCH, "billCycle/C1"),
+    ] {
+        let response = handler
+            .handle(&request(method.clone(), &format!("{base}/{path}")))
+            .await;
+        assert_eq!(
+            response.status,
+            http::StatusCode::METHOD_NOT_ALLOWED,
+            "{method} /{path}"
+        );
+        assert!(
+            response.headers.contains_key(http::header::ALLOW),
+            "{method} /{path}"
+        );
+    }
+    assert_eq!(handler.store().calls(), Vec::<String>::new());
+    assert_eq!(*notified.0.lock().unwrap(), 0);
+}
+
+/// A collection the API does not declare is a `404` without asking the store,
+/// even a store that claims to serve everything.
+///
+/// declared-operations/SR-003
+#[cfg(feature = "api-tmf678")]
+#[tokio::test]
+async fn an_undeclared_collection_is_not_found_without_asking_the_store() {
+    use rutmf::api::tmf678;
+    let handler = TmfHandler::for_host(&tmf678::API, "http://host", Spy::default());
+    let base = handler.base_url().to_owned();
+    for (method, path) in [
+        (http::Method::POST, "listener"),
+        (http::Method::GET, "nonsense/1"),
+        (http::Method::POST, "productOffering"),
+    ] {
+        let response = handler
+            .handle(&request(method.clone(), &format!("{base}/{path}")))
+            .await;
+        assert_eq!(
+            response.status,
+            http::StatusCode::NOT_FOUND,
+            "{method} /{path}"
+        );
+    }
+    assert_eq!(handler.store().calls(), Vec::<String>::new());
+}
+
+/// A body over the adapter's limit is refused with `413` before it is parsed,
+/// so an oversized usage batch costs the server one bounded read.
+///
+/// product-usage/SR-005
+#[cfg(feature = "api-tmf635")]
+#[tokio::test]
+async fn an_oversized_usage_body_is_refused_before_the_store() {
+    use rutmf::api::tmf635;
+
+    #[derive(Clone)]
+    struct Shared(std::sync::Arc<Spy>);
+    #[async_trait::async_trait]
+    impl ResourceStore for Shared {
+        async fn has_collection(&self, c: &str) -> bool {
+            self.0.has_collection(c).await
+        }
+        async fn list(&self, c: &str, s: &Selection) -> StoreResult<Matched> {
+            self.0.list(c, s).await
+        }
+        async fn get(&self, c: &str, id: &str) -> StoreResult<Option<Value>> {
+            self.0.get(c, id).await
+        }
+        async fn create(&self, c: &str, r: Value) -> StoreResult<Value> {
+            self.0.create(c, r).await
+        }
+        async fn replace(&self, c: &str, id: &str, r: Value) -> StoreResult<Option<Value>> {
+            self.0.replace(c, id, r).await
+        }
+        async fn delete(&self, c: &str, id: &str) -> StoreResult<bool> {
+            self.0.delete(c, id).await
+        }
+    }
+
+    let spy = std::sync::Arc::new(Spy::default());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let host = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+    let handler = TmfHandler::for_host(&tmf635::API, &host, Shared(spy.clone()));
+    let url = format!("{}/productUsage", handler.base_url());
+    let app = axum::Router::new().nest(
+        &format!("/{}", tmf635::API.path),
+        rutmf::server::router(handler),
+    );
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+    let mut request = rutmf::api::TmfRequest::new(http::Method::POST, url);
+    request.headers.insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/json"),
+    );
+    request.body = Some(bytes::Bytes::from(vec![b' '; 9 * 1024 * 1024]));
+    let response = ReqwestTransport::new()
+        .unwrap()
+        .execute(request)
+        .await
+        .unwrap();
+
+    assert_eq!(response.status, http::StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(spy.calls(), Vec::<String>::new());
 }

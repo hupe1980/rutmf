@@ -4,7 +4,7 @@ use bytes::Bytes;
 use http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use serde_json::Value;
 
-use crate::api::{TmfRequest, TmfResponse};
+use crate::api::{Api, TmfRequest, TmfResponse};
 
 use crate::core::EventKind;
 
@@ -14,10 +14,18 @@ use super::notify::{
 use super::semantics::{apply_json_patch, apply_merge_patch, project_fields};
 use super::store::{Replaced, ResourceStore, Selection, StoreError};
 
-/// Serves a [`ResourceStore`] over the TMF630 collection semantics.
+/// Serves a [`ResourceStore`] as one TM Forum API, over the TMF630 collection
+/// semantics.
 ///
-/// The handler owns everything between the socket and the store: routing a URL
-/// to a collection and an id, reading the query into a [`Selection`], projecting
+/// The handler is built for one [`Api`] — `rutmf::api::tmf678::API`, say — and
+/// serves exactly what that specification declares. A method the API does not
+/// declare on a path is answered `405` with an `Allow` header, and a collection
+/// it does not declare `404`, before the body is parsed or the store is
+/// called. A TMF678 server therefore refuses `POST /customerBill` and
+/// `DELETE /customerBill/{id}` without a line of code in the store.
+///
+/// Within that surface, the handler owns everything between the socket and the
+/// store: routing a URL to a collection and an id, reading the query into a [`Selection`], projecting
 /// `fields=`, setting the count headers, choosing `200` or `206`, applying the
 /// right kind of `PATCH`, and rendering failures as TMF630 error bodies.
 ///
@@ -31,20 +39,21 @@ use super::store::{Replaced, ResourceStore, Selection, StoreError};
 /// [`Transport`]: crate::api::Transport
 ///
 /// ```
+/// # #[cfg(feature = "api-tmf678")] {
+/// use rutmf::api::tmf678;
 /// use rutmf::server::{MemoryStore, TmfHandler};
 ///
-/// let handler = TmfHandler::new(
-///     "https://mycsp.com/tmf-api/productCatalogManagement/v5",
-///     MemoryStore::new(),
-/// );
+/// let handler = TmfHandler::for_host(&tmf678::API, "https://mycsp.com", MemoryStore::new());
 /// assert_eq!(
 ///     handler.base_url(),
-///     "https://mycsp.com/tmf-api/productCatalogManagement/v5"
+///     "https://mycsp.com/tmf-api/customerBillManagement/v5"
 /// );
+/// # }
 /// ```
 #[derive(Clone)]
 pub struct TmfHandler<S> {
     base_url: String,
+    surface: Surface,
     store: S,
     ids: std::sync::Arc<dyn IdGenerator>,
     /// `None` until a notifier is configured, so a deployment that does not
@@ -64,15 +73,53 @@ impl<S: std::fmt::Debug> std::fmt::Debug for TmfHandler<S> {
     }
 }
 
+/// Which operations the handler serves.
+///
+/// `Any` exists for the unscoped [`MockTmfServer`](crate::mock::MockTmfServer),
+/// a test double that serves collections of several APIs at once. It is not
+/// reachable from outside the crate: a production handler always names an
+/// [`Api`].
+#[derive(Debug, Clone, Copy)]
+enum Surface {
+    Declared(&'static Api),
+    #[cfg_attr(
+        not(feature = "mock"),
+        allow(dead_code, reason = "only the mock serves every collection")
+    )]
+    Any,
+}
+
 impl<S> TmfHandler<S> {
-    /// Serves `store` as the API rooted at `base_url`.
+    /// Serves `store` as `api`, rooted at `base_url`.
     ///
     /// The base URL is what the handler stamps into the `href` of a created
     /// resource and into the `Location` header, so it should be the URL clients
-    /// reach the API on, not a local bind address.
-    pub fn new(base_url: impl Into<String>, store: S) -> Self {
+    /// reach the API on, not a local bind address. [`for_host`](Self::for_host)
+    /// builds it from the API's conventional root.
+    ///
+    /// An API this crate does not cover is served the same way, from an [`Api`]
+    /// you declare — see [`Api::new`].
+    pub fn new(api: &'static Api, base_url: impl Into<String>, store: S) -> Self {
+        Self::with_surface(Surface::Declared(api), &base_url.into(), store)
+    }
+
+    /// Serves `store` as `api` on `host`, at the API's conventional root —
+    /// `https://mycsp.com` becomes
+    /// `https://mycsp.com/tmf-api/customerBillManagement/v5` for TMF678.
+    pub fn for_host(api: &'static Api, host: &str, store: S) -> Self {
+        Self::new(api, api.url_on(host), store)
+    }
+
+    /// Serves every collection with every operation. For the unscoped mock only.
+    #[cfg(feature = "mock")]
+    pub(crate) fn serving_anything(base_url: impl Into<String>, store: S) -> Self {
+        Self::with_surface(Surface::Any, &base_url.into(), store)
+    }
+
+    fn with_surface(surface: Surface, base_url: &str, store: S) -> Self {
         Self {
-            base_url: base_url.into().trim_end_matches('/').to_owned(),
+            base_url: base_url.trim_end_matches('/').to_owned(),
+            surface,
             store,
             ids: std::sync::Arc::new(RandomId::default()),
             notifier: None,
@@ -96,8 +143,10 @@ impl<S> TmfHandler<S> {
     ///
     /// ```
     /// use rutmf::server::{MemoryStore, TmfHandler};
+    /// # use rutmf::api::{Api, Collection};
+    /// # const API: Api = Api::new("X", "tmf-api/x/v5", "5.0.0", &[Collection::crud("thing")]);
     ///
-    /// let handler = TmfHandler::new("https://host/tmf-api/x/v5", MemoryStore::new())
+    /// let handler = TmfHandler::new(&API, "https://host/tmf-api/x/v5", MemoryStore::new())
     ///     .with_max_page_size(100);
     /// # let _ = handler;
     /// ```
@@ -144,6 +193,49 @@ impl<S> TmfHandler<S> {
     #[must_use]
     pub fn base_url(&self) -> &str {
         &self.base_url
+    }
+
+    /// The API this handler serves. `None` only for the unscoped
+    /// [`MockTmfServer`](crate::mock::MockTmfServer), which serves anything.
+    #[must_use]
+    pub fn api(&self) -> Option<&'static Api> {
+        match self.surface {
+            Surface::Declared(api) => Some(api),
+            Surface::Any => None,
+        }
+    }
+
+    /// The response to a request the API does not declare, or `None` if it
+    /// does.
+    ///
+    /// Needs only the method and the URL, so an adapter can call it before it
+    /// reads the body — the `axum` one does — and [`handle`](Self::handle)
+    /// calls it before anything else. A request refused here never reaches the
+    /// store and never raises a notification.
+    #[must_use]
+    pub fn refusal(&self, method: &Method, url: &str) -> Option<TmfResponse> {
+        let Some((collection, id)) = route(&self.base_url, url) else {
+            return Some(no_resource_at(url));
+        };
+        let on_item = id.is_some();
+        let allowed = match self.surface {
+            Surface::Declared(api) => {
+                let Some(declared) = api.collection(&collection) else {
+                    return Some(error_response(
+                        StatusCode::NOT_FOUND,
+                        "40401",
+                        &format!("{} declares no {collection} collection", api.name),
+                    ));
+                };
+                declared.allowed_methods(on_item)
+            }
+            Surface::Any if on_item => vec![Method::GET, Method::PATCH, Method::DELETE],
+            Surface::Any => vec![Method::GET, Method::POST],
+        };
+        if allowed.is_empty() {
+            return Some(no_resource_at(url));
+        }
+        (!allowed.contains(method)).then(|| method_not_allowed(method, &allowed))
     }
 
     /// The store behind the handler.
@@ -209,12 +301,11 @@ impl<S: ResourceStore> TmfHandler<S> {
     /// is deliberate — an HTTP server has to say *something*, and deciding what
     /// is this type's job rather than the caller's.
     pub async fn handle(&self, request: &TmfRequest) -> TmfResponse {
+        if let Some(refused) = self.refusal(&request.method, &request.url) {
+            return refused;
+        }
         let Some((collection, id)) = route(&self.base_url, &request.url) else {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "40401",
-                &format!("No TM Forum resource at {}", request.url),
-            );
+            return no_resource_at(&request.url);
         };
 
         if !self.store.has_collection(&collection).await {
@@ -231,16 +322,14 @@ impl<S: ResourceStore> TmfHandler<S> {
             (Method::POST, None) => self.create(&collection, request).await,
             (Method::PATCH, Some(id)) => self.patch(&collection, &id, request).await,
             (Method::DELETE, Some(id)) => self.delete(&collection, &id, request).await,
-            (method, _) => error_response(
-                StatusCode::METHOD_NOT_ALLOWED,
-                "40501",
-                &format!("{method} is not allowed on this path"),
-            ),
+            // `refusal` let only declared operations through, and every
+            // operation is one of the arms above.
+            (method, _) => method_not_allowed(&method, &[]),
         }
     }
 
     async fn list(&self, collection: &str, request: &TmfRequest) -> TmfResponse {
-        // TMF621 and TMF639 declare a `filter` parameter carrying a JSONPath
+        // TMF621, TMF635 and TMF639 declare a `filter` parameter carrying a JSONPath
         // expression — a different mechanism from the attribute filtering every
         // other collection uses, and one this handler does not implement.
         // Ignoring it would answer a request to narrow a collection with the
@@ -570,6 +659,8 @@ fn trailing_segments(path: &str) -> &str {
 ///
 /// ```
 /// use rutmf::server::{Listener, MemoryStore, Notifier, TmfHandler};
+/// # use rutmf::api::{Api, Collection};
+/// # const API: Api = Api::new("X", "tmf-api/x/v5", "5.0.0", &[Collection::crud("thing")]);
 /// use serde_json::Value;
 ///
 /// /// Hands each notification to a queue rather than blocking the write.
@@ -584,7 +675,7 @@ fn trailing_segments(path: &str) -> &str {
 /// }
 ///
 /// # fn demo(tx: tokio::sync::mpsc::UnboundedSender<(String, Value)>) {
-/// let handler = TmfHandler::new("https://host/tmf-api/x/v5", MemoryStore::new())
+/// let handler = TmfHandler::new(&API, "https://host/tmf-api/x/v5", MemoryStore::new())
 ///     .with_notifier(Enqueue(tx));
 /// # let _ = handler;
 /// # }
@@ -627,6 +718,8 @@ impl Notifier for () {
 ///
 /// ```
 /// use rutmf::server::{IdGenerator, MemoryStore, TmfHandler};
+/// # use rutmf::api::{Api, Collection};
+/// # const API: Api = Api::new("X", "tmf-api/x/v5", "5.0.0", &[Collection::crud("thing")]);
 /// use std::sync::atomic::{AtomicU64, Ordering};
 ///
 /// /// Ids from a database-style sequence, for a deployment that wants them.
@@ -638,7 +731,7 @@ impl Notifier for () {
 ///     }
 /// }
 ///
-/// let handler = TmfHandler::new("https://host/tmf-api/x/v5", MemoryStore::new())
+/// let handler = TmfHandler::new(&API, "https://host/tmf-api/x/v5", MemoryStore::new())
 ///     .with_id_generator(Sequence(AtomicU64::new(1)));
 /// ```
 pub trait IdGenerator: Send + Sync {
@@ -891,6 +984,33 @@ fn json_response(status: StatusCode, mut headers: HeaderMap, body: &Value) -> Tm
     TmfResponse::new(status, headers, Bytes::from(bytes))
 }
 
+/// `404` for a path that names no resource of this API.
+fn no_resource_at(url: &str) -> TmfResponse {
+    error_response(
+        StatusCode::NOT_FOUND,
+        "40401",
+        &format!("No TM Forum resource at {url}"),
+    )
+}
+
+/// `405` with the `Allow` header RFC 9110 §15.5.6 requires on every one.
+fn method_not_allowed(method: &Method, allowed: &[Method]) -> TmfResponse {
+    let list = allowed
+        .iter()
+        .map(Method::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut response = error_response(
+        StatusCode::METHOD_NOT_ALLOWED,
+        "40501",
+        &format!("{method} is not allowed on this path; allowed: {list}"),
+    );
+    if let Ok(value) = HeaderValue::from_str(&list) {
+        response.headers.insert(header::ALLOW, value);
+    }
+    response
+}
+
 /// Renders a TMF630 `Error` body.
 pub(crate) fn error_response(status: StatusCode, code: &str, reason: &str) -> TmfResponse {
     let body = serde_json::json!({
@@ -905,6 +1025,140 @@ pub(crate) fn error_response(status: StatusCode, code: &str, reason: &str) -> Tm
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::{Collection, Operation};
+
+    /// TMF678 as its specification declares it — kept local so these tests do
+    /// not need the `api-tmf678` feature.
+    const TEST_API: Api = Api::new(
+        "TMF678",
+        "tmf-api/customerBillManagement/v5",
+        "5.0.0",
+        &[
+            Collection::read_only("appliedCustomerBillingRate"),
+            Collection::new(
+                "customerBill",
+                &[Operation::List, Operation::Retrieve, Operation::Update],
+            ),
+            Collection::task("customerBillOnDemand"),
+            Collection::new("hub", &[Operation::Create, Operation::Delete]),
+        ],
+    );
+    const BASE: &str = "http://host/tmf-api/customerBillManagement/v5";
+
+    fn bills() -> TmfHandler<crate::server::MemoryStore> {
+        let store = crate::server::MemoryStore::new();
+        store.seed(
+            "customerBill",
+            serde_json::json!({"id": "B1", "state": "new", "@type": "CustomerBill"}),
+        );
+        TmfHandler::new(&TEST_API, BASE, store)
+    }
+
+    fn send(method: Method, path: &str, body: Option<&str>) -> TmfRequest {
+        let mut request = TmfRequest::new(method, format!("{BASE}/{path}"));
+        if let Some(body) = body {
+            request.headers.insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/merge-patch+json"),
+            );
+            request.body = Some(Bytes::from(body.to_owned()));
+        }
+        request
+    }
+
+    fn allow(response: &TmfResponse) -> &str {
+        response
+            .headers
+            .get(header::ALLOW)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("<none>")
+    }
+
+    /// TMF678 declares none of these: an issued bill is never created or
+    /// deleted through the API.
+    #[tokio::test]
+    async fn a_billing_server_refuses_what_tmf678_does_not_declare() {
+        let handler = bills();
+        let post = handler
+            .handle(&send(Method::POST, "customerBill", Some("{}")))
+            .await;
+        assert_eq!(
+            (post.status, allow(&post)),
+            (StatusCode::METHOD_NOT_ALLOWED, "GET")
+        );
+        let delete = handler
+            .handle(&send(Method::DELETE, "customerBill/B1", None))
+            .await;
+        assert_eq!(
+            (delete.status, allow(&delete)),
+            (StatusCode::METHOD_NOT_ALLOWED, "GET, PATCH")
+        );
+        let rate = handler
+            .handle(&send(
+                Method::POST,
+                "appliedCustomerBillingRate",
+                Some("{}"),
+            ))
+            .await;
+        assert_eq!(
+            (rate.status, allow(&rate)),
+            (StatusCode::METHOD_NOT_ALLOWED, "GET")
+        );
+        assert_eq!(handler.store().collection("customerBill").len(), 1);
+        assert_eq!(
+            handler
+                .store()
+                .collection("appliedCustomerBillingRate")
+                .len(),
+            0
+        );
+
+        // What TMF678 does declare still works.
+        let patch = handler
+            .handle(&send(
+                Method::PATCH,
+                "customerBill/B1",
+                Some(r#"{"state":"sent"}"#),
+            ))
+            .await;
+        assert_eq!(patch.status, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn every_405_names_what_is_allowed_and_undeclared_collections_are_404() {
+        let handler = bills();
+        let put = handler
+            .handle(&send(Method::PUT, "customerBill/B1", Some("{}")))
+            .await;
+        assert_eq!(
+            (put.status, allow(&put)),
+            (StatusCode::METHOD_NOT_ALLOWED, "GET, PATCH")
+        );
+        let hub = handler.handle(&send(Method::GET, "hub/h1", None)).await;
+        assert_eq!(
+            (hub.status, allow(&hub)),
+            (StatusCode::METHOD_NOT_ALLOWED, "DELETE")
+        );
+        let listener = handler
+            .handle(&send(Method::POST, "listener", Some("{}")))
+            .await;
+        assert_eq!(listener.status, StatusCode::NOT_FOUND);
+        assert_eq!(handler.store().collection("listener").len(), 0);
+    }
+
+    #[test]
+    fn for_host_roots_the_api_at_its_conventional_path() {
+        let handler = TmfHandler::for_host(
+            &TEST_API,
+            "https://mycsp.com/",
+            crate::server::MemoryStore::new(),
+        );
+        assert_eq!(
+            handler.base_url(),
+            BASE.replace("http://host", "https://mycsp.com")
+        );
+        assert_eq!(handler.api().map(|api| api.name), Some("TMF678"));
+    }
 
     #[test]
     fn a_collection_and_an_item_route_apart() {
@@ -969,6 +1223,7 @@ mod tests {
             }
         }
         let handler = TmfHandler::new(
+            &TEST_API,
             "http://host/tmf-api/x/v5",
             crate::server::MemoryStore::new(),
         )

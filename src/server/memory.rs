@@ -195,7 +195,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(outcome, None);
-        assert!(store.collection("thing").is_empty());
+        assert_eq!(store.collection("thing"), Vec::<Value>::new());
     }
 
     #[tokio::test]

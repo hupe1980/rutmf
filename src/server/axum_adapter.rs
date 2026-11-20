@@ -29,18 +29,14 @@ use super::store::ResourceStore;
 /// Mount it wherever the API's base URL says it lives:
 ///
 /// ```no_run
+/// # #[cfg(feature = "api-tmf620")]
+/// # async fn serve() -> Result<(), Box<dyn std::error::Error>> {
+/// use rutmf::api::tmf620;
 /// use rutmf::server::{MemoryStore, TmfHandler, router};
 ///
-/// # async fn serve() -> Result<(), Box<dyn std::error::Error>> {
-/// let handler = TmfHandler::new(
-///     "https://mycsp.com/tmf-api/productCatalogManagement/v5",
-///     MemoryStore::new(),
-/// );
+/// let handler = TmfHandler::for_host(&tmf620::API, "https://mycsp.com", MemoryStore::new());
 ///
-/// let app = axum::Router::new().nest(
-///     "/tmf-api/productCatalogManagement/v5",
-///     router(handler),
-/// );
+/// let app = axum::Router::new().nest(&format!("/{}", tmf620::API.path), router(handler));
 ///
 /// let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
 /// axum::serve(listener, app).await?;
@@ -70,6 +66,12 @@ where
     const MAX_BODY: usize = 8 * 1024 * 1024;
 
     let (parts, body) = request.into_parts();
+    // Refuse what the API does not declare before reading a byte of the body:
+    // an undeclared write must cost the server nothing.
+    let url = absolute_url(handler.base_url(), &parts.uri);
+    if let Some(refused) = handler.refusal(&parts.method, &url) {
+        return into_response(&refused);
+    }
     let Ok(body) = axum::body::to_bytes(body, MAX_BODY).await else {
         return into_response(&super::handler::error_response(
             StatusCode::PAYLOAD_TOO_LARGE,
@@ -80,7 +82,7 @@ where
 
     let request = TmfRequest {
         method: parts.method.clone(),
-        url: absolute_url(handler.base_url(), &parts.uri),
+        url,
         query: parse_query(parts.uri.query()),
         headers: parts.headers,
         body: (!body.is_empty()).then_some(body),

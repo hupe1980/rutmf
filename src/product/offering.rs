@@ -110,13 +110,13 @@ tmf_struct! {
     /// a request a conformant server would reject does not compile.
     ///
     /// ```
+    /// use rutmf::core::Timestamp;
     /// use rutmf::product::ProductOfferingCreate;
-    /// use chrono::Utc;
     ///
     /// let body = ProductOfferingCreate::builder()
     ///     .name("Business Internet")
     ///     .lifecycle_status("Active")
-    ///     .last_update(Utc::now())
+    ///     .last_update(Timestamp::now())
     ///     .is_sellable(true)
     ///     .build();
     /// assert_eq!(body.name, "Business Internet");

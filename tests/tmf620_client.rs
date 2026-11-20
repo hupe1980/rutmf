@@ -6,7 +6,6 @@
 
 #![cfg(all(feature = "api-tmf620", feature = "mock"))]
 
-use chrono::{TimeZone, Utc};
 use futures::StreamExt;
 use serde_json::json;
 
@@ -129,7 +128,11 @@ async fn creates_from_the_fvo_body() {
     let body = ProductOfferingCreate::builder()
         .name("Business Internet")
         .lifecycle_status("Active")
-        .last_update(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap())
+        .last_update(
+            "2026-01-01T00:00:00Z"
+                .parse::<rutmf::core::Timestamp>()
+                .unwrap(),
+        )
         .is_sellable(true)
         .build();
 

@@ -29,6 +29,7 @@ use super::page::{Page, PageRequest, PageStream, paginate};
 use super::patch::Patch;
 use super::query::Query;
 use super::transport::Transport;
+use super::{Api, Collection, Operation};
 use super::{op_get, op_list, op_patch, op_stream, readonly_ops, task_ops};
 
 /// The conventional API root, appended to a host to form the base URL.
@@ -40,6 +41,27 @@ pub const API_PATH: &str = "tmf-api/customerBillManagement/v5";
 /// rather than a single crate-wide constant. Asserted against the vendored
 /// corpus by `every_client_reports_the_version_it_was_modelled_from`.
 pub const SPEC_VERSION: &str = "5.0.0";
+
+/// What TMF678 declares: every collection, including `hub`, with the
+/// operations on each.
+///
+/// [`TmfHandler`](crate::server::TmfHandler) refuses anything else, and
+/// `tests/coverage.rs` holds this equal to the specification document.
+pub const API: Api = Api::new(
+    "TMF678",
+    API_PATH,
+    SPEC_VERSION,
+    &[
+        Collection::read_only("appliedCustomerBillingRate"),
+        Collection::read_only("billCycle"),
+        Collection::new(
+            "customerBill",
+            &[Operation::List, Operation::Retrieve, Operation::Update],
+        ),
+        Collection::task("customerBillOnDemand"),
+        Collection::new("hub", &[Operation::Create, Operation::Delete]),
+    ],
+);
 
 const BILLS: &str = "customerBill";
 const ON_DEMAND: &str = "customerBillOnDemand";

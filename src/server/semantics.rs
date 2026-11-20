@@ -171,16 +171,24 @@ fn order(actual: &Value, expected: &str) -> Option<Ordering> {
 ///
 /// Returns `None` for anything else, which is what sends the comparison back to
 /// text — a lifecycle name is not a date and must not be treated as one.
-fn instant(raw: &str) -> Option<chrono::DateTime<chrono::Utc>> {
-    use chrono::TimeZone as _;
-
-    if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(raw) {
-        return Some(parsed.to_utc());
+fn instant(raw: &str) -> Option<jiff::Timestamp> {
+    if let Ok(parsed) = raw.parse::<crate::core::Timestamp>() {
+        return Some(parsed.instant());
     }
-    let date = chrono::NaiveDate::parse_from_str(raw, "%Y-%m-%d").ok()?;
-    chrono::Utc
-        .from_local_datetime(&date.and_time(chrono::NaiveTime::MIN))
-        .single()
+    // Only the extended `YYYY-MM-DD` form: the date parser also reads ISO 8601's
+    // basic form and expanded years, which no TMF filter value means.
+    let shaped = raw.len() == 10
+        && raw.bytes().enumerate().all(|(i, b)| match i {
+            4 | 7 => b == b'-',
+            _ => b.is_ascii_digit(),
+        });
+    if !shaped {
+        return None;
+    }
+    let date: jiff::civil::Date = raw.parse().ok()?;
+    jiff::tz::Offset::UTC
+        .to_timestamp(date.to_datetime(jiff::civil::Time::midnight()))
+        .ok()
 }
 
 /// A deliberately small subset of regular expressions: `*` and `?` wildcards.

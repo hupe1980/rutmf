@@ -1,6 +1,6 @@
 +++
 title = "rutmf"
-description = "Ergonomic, v5-first Rust types and clients for the TM Forum Open APIs. Typed references, real decimals, guaranteed round-trip fidelity, and a conformance suite over 591 official specification examples."
+description = "Ergonomic, v5-first Rust types and clients for the TM Forum Open APIs. Typed references, real decimals, guaranteed round-trip fidelity, and a conformance suite over 610 official specification examples."
 template = "index.html"
 
 [extra]
@@ -89,6 +89,12 @@ version = "v5.0.0"
 resources = "Account (billing, financial, party, settlement), BillFormat, BillPresentationMedia, BillingCycleSpecification"
 
 [[extra.apis]]
+id = "TMF635"
+name = "Product Usage Management"
+version = "v5.0.0"
+resources = "ProductUsage (rated usage, prices on the record), ExportJob"
+
+[[extra.apis]]
 id = "TMF678"
 name = "Customer Bill"
 version = "v5.0.0"
@@ -127,12 +133,13 @@ round trip, a price that must not be a float, a `PATCH` body that must match the
 content type it was sent under.
 
 `rutmf` puts those details in the type system, then proves it. The domain model
-is checked member by member against the vendored v5 OpenAPI documents, and every
+is checked member by member against the pinned v5 OpenAPI documents, and every
 official example in those documents must parse and re-serialise unchanged —
 both on every commit.
 
 ```rust
 use rutmf::api::{Query, tmf620::ProductCatalogClient};
+use rutmf::core::Timestamp;
 use rutmf::product::ProductOfferingCreate;
 
 let client = ProductCatalogClient::new(
@@ -146,11 +153,11 @@ let offering = client.create_product_offering(
     &ProductOfferingCreate::builder()
         .name("Business Internet")
         .lifecycle_status("Active")
-        .last_update(chrono::Utc::now())
+        .last_update(Timestamp::now())
         .build(),
 ).await?;
 ```
 
-Together the fourteen APIs close the loop from shelf to network: browse a catalog,
+Together the fifteen APIs close the loop from shelf to network: browse a catalog,
 identify who is buying, engage them as a customer, place the order — then find
 what the customer actually has, what delivers it, and what that runs on.

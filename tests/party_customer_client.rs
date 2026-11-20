@@ -165,7 +165,7 @@ async fn registers_and_removes_a_listener() {
 
     let id = hub.id.clone().expect("server assigns a hub id");
     client.unregister_listener(&id).await.unwrap();
-    assert!(server.collection("hub").is_empty());
+    assert_eq!(server.collection("hub"), Vec::<serde_json::Value>::new());
 }
 
 #[tokio::test]

@@ -10,9 +10,9 @@ adding or changing one:
 
 1. Read the actual OAS, not the PDF user guide and not another implementation.
    The documents live at [`github.com/tmforum-apis`](https://github.com/tmforum-apis).
-2. Vendor the spec into `specs/` and its `components.examples` into
-   `tests/fixtures/<api>/`, with a `_manifest.json` recording the source,
-   license and version.
+2. Pin the spec in `scripts/references.sh` — repository, commit, file name and
+   SHA-256 — and vendor its `components.examples` into `tests/fixtures/<api>/`,
+   with a `_manifest.json` recording the source, license and version.
 3. Map the type in `tests/coverage.rs`. **A type not listed there is not done** —
    see below.
 
@@ -40,7 +40,7 @@ So there are two suites, and both are required:
 | `tests/conformance.rs` | every vendored example parses and round-trips | `cargo test --test conformance` |
 | `tests/coverage.rs` | the model against the schemas: 215 Rust types over 462 v5 schemas | `cargo test --test coverage --features schemars` |
 
-`coverage.rs` reads the vendored OpenAPI documents directly and compares them
+`coverage.rs` reads the pinned OpenAPI documents directly and compares them
 against the `schemars`-generated schema of each Rust type — so it checks the
 actual serde encoding, not a transcription of it. It asserts:
 
@@ -56,7 +56,7 @@ actual serde encoding, not a transcription of it. It asserts:
 8. every `@type` value is the one the schema's own `discriminator.mapping`
    names, and every `…Ref` class the model claims is one a specification
    defines;
-9. **the mapping covers every type the model declares**, and the fourteen
+9. **the mapping covers every type the model declares**, and the fifteen
    specifications agree about the types this crate models once;
 10. **every schema the documents declare is modelled or excused** by name in
     `NOT_MODELLED` — the reverse direction, and the one that makes "is the model
@@ -197,6 +197,7 @@ rust-analyzer at all features the same way.
 ## Before opening a PR
 
 ```console
+scripts/references.sh                         # once: the OpenAPI documents the suites read
 cargo fmt --all
 cargo clippy --all-features --all-targets     # must be silent
 cargo test --all-features                     # includes conformance and coverage
@@ -230,15 +231,20 @@ correct.
    for top-level resources. Reference targets defined by *other* APIs go in
    `core::refs`, not in the domain module.
 2. Add `src/api/tmfXXX.rs` using the `resource_ops!` macro for the CRUD surface,
-   and `impl HubOps` so event subscriptions work uniformly.
+   and `impl HubOps` so event subscriptions work uniformly — plus `HubLookup` if,
+   and only if, the API declares `GET /hub/{id}`. Publish the API's declared
+   surface as `pub const API: Api` (every collection, including `hub` and those
+   not modelled); `tests/coverage.rs` holds it equal to the document and the
+   server serves exactly it. Add it to `SURFACES` in `tests/coverage.rs` and
+   `tests/server_conformance.rs`.
 3. Add an `api-tmfXXX` feature gating both, and list it in `.github/workflows/ci.yml`
    so the feature builds alone.
 4. Add the resources to `api::resolve`'s `resolvable!` list so `Ref<T>::resolve`
    works for them.
-5. Vendor the spec into `specs/` and its examples into `tests/fixtures/tmfXXX/`,
-   add the API to `APIS` in both `tests/conformance.rs` and `tests/coverage.rs`
-   — with its exact example count, and updating `TOTAL_FIXTURES` — and add the
-   drift check to CI. If TM Forum's fixture names do not fit the classification
+5. Pin the spec in `scripts/references.sh` and vendor its examples into
+   `tests/fixtures/tmfXXX/`, add the API to `APIS` in both `tests/conformance.rs`
+   and `tests/coverage.rs` — with its exact example count, and updating
+   `TOTAL_FIXTURES`. The pin is also what the CI drift check reads. If TM Forum's fixture names do not fit the classification
    rules in `conformance.rs`, extend the rules — do not add an exception,
    because an exception is how a fixture stops being tested.
 6. Add every type to the mapping in `tests/coverage.rs` — the suite fails until

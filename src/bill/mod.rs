@@ -28,6 +28,8 @@
 
 mod customer_bill;
 
+#[cfg(feature = "usage")]
+pub use customer_bill::PRODUCT_USAGE_CHARACTERISTIC;
 pub use customer_bill::{
     AppliedBillingTaxRate, AppliedCustomerBillingRate, AppliedPayment, BillCycle, CustomerBill,
     CustomerBillOnDemand, CustomerBillOnDemandCreate, CustomerBillOnDemandState,

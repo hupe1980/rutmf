@@ -17,23 +17,27 @@
 //! TMF630 requires. It is spec-driven, so vendoring a fifteenth API extends the
 //! suite without a line being added here.
 
-#![cfg(all(feature = "server-axum", feature = "transport-reqwest"))]
+#![cfg(all(
+    feature = "server-axum",
+    feature = "transport-reqwest",
+    feature = "full"
+))]
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use http::{Method, StatusCode, header};
 use serde_json::{Value, json};
 use serde_norway::Value as Yaml;
 
-use rutmf::api::{ReqwestTransport, TmfClient, TmfRequest};
+use rutmf::api::{Api, ReqwestTransport, TmfClient, TmfRequest, Transport};
 use rutmf::server::{MemoryStore, TmfHandler};
 
 /// The vendored documents, and the API root each is served under.
 /// Collections the vendored specifications declare between them.
 ///
 /// Quoted in README.md, `src/lib.rs` and the site.
-const COLLECTION_COUNT: usize = 43;
+const COLLECTION_COUNT: usize = 44;
 
 const SPECS: &[(&str, &str)] = &[
     (
@@ -57,6 +61,7 @@ const SPECS: &[(&str, &str)] = &[
         "TMF639",
         "TMF639-Resource_Inventory_Management-v5.0.0.oas.yaml",
     ),
+    ("TMF635", "TMF635-Product_Usage_Management-v5.0.0.oas.yaml"),
     ("TMF642", "TMF642_Alarm_v5.0.1.oas.yaml"),
     ("TMF666", "TMF666-Account_Management-v5.0.0.oas.yaml"),
     ("TMF669", "TMF669-Party_Role_Management-v5.0.0.oas.yaml"),
@@ -66,6 +71,33 @@ const SPECS: &[(&str, &str)] = &[
     ),
     ("TMF678", "TMF678-CustomerBill-v5.0.0.oas.yaml"),
 ];
+
+/// The surface each API module publishes, keyed by API.
+const SURFACES: &[&Api] = &[
+    &rutmf::api::tmf620::API,
+    &rutmf::api::tmf621::API,
+    &rutmf::api::tmf622::API,
+    &rutmf::api::tmf629::API,
+    &rutmf::api::tmf632::API,
+    &rutmf::api::tmf634::API,
+    &rutmf::api::tmf635::API,
+    &rutmf::api::tmf637::API,
+    &rutmf::api::tmf638::API,
+    &rutmf::api::tmf639::API,
+    &rutmf::api::tmf642::API,
+    &rutmf::api::tmf666::API,
+    &rutmf::api::tmf669::API,
+    &rutmf::api::tmf678::API,
+    &rutmf::api::tmf679::API,
+];
+
+fn surface(api: &str) -> &'static Api {
+    SURFACES
+        .iter()
+        .copied()
+        .find(|surface| surface.name == api)
+        .unwrap_or_else(|| panic!("{api} publishes no `API`"))
+}
 
 /// One collection and the HTTP methods its specification declares.
 #[derive(Debug, Default)]
@@ -112,27 +144,46 @@ fn declared(spec: &Yaml) -> BTreeMap<String, Declared> {
     out
 }
 
+/// Where the `OpenAPI` documents live: `$RUTMF_REFERENCE/oas` when the variable
+/// is set, else the git-ignored reference directory of this checkout.
+/// `scripts/references.sh` fetches them there, pinned by commit and SHA-256.
+fn spec_dir() -> PathBuf {
+    std::env::var_os("RUTMF_REFERENCE")
+        .map_or_else(
+            || Path::new(env!("CARGO_MANIFEST_DIR")).join("concepts/reference"),
+            PathBuf::from,
+        )
+        .join("oas")
+}
+
 fn load(file: &str) -> Yaml {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("specs")
-        .join(file);
-    let raw = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
+    let path = spec_dir().join(file);
+    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!(
+            "reading {}: {e}\nFetch the specifications with `scripts/references.sh`.",
+            path.display()
+        )
+    });
     serde_norway::from_str(&raw).expect("the vendored spec is valid YAML")
 }
 
 /// Serves a `MemoryStore` on an ephemeral port and returns a client for it.
-async fn serve(api: &str) -> (TmfClient, String) {
+///
+/// Returns the store as well, so a collection the API gives clients no way to
+/// create can be seeded the way a billing run or a network would fill it.
+async fn serve(api: &str) -> (TmfClient, String, MemoryStore) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("a free port");
     let port = listener.local_addr().expect("a bound address").port();
-    let root = format!("/tmf-api/{}/v5", api.to_ascii_lowercase());
+    let api = surface(api);
+    let root = format!("/{}", api.path);
     let base_url = format!("http://127.0.0.1:{port}{root}");
+    let store = MemoryStore::new();
 
     let app = axum::Router::new().nest(
         &root,
-        rutmf::server::router(TmfHandler::new(&base_url, MemoryStore::new())),
+        rutmf::server::router(TmfHandler::new(api, &base_url, store.clone())),
     );
     tokio::spawn(async move {
         axum::serve(listener, app).await.expect("the server runs");
@@ -143,7 +194,7 @@ async fn serve(api: &str) -> (TmfClient, String) {
         ReqwestTransport::new().expect("a transport"),
     )
     .expect("a valid base URL");
-    (client, base_url)
+    (client, base_url, store)
 }
 
 /// A minimal but valid resource for any TMF collection.
@@ -285,6 +336,7 @@ async fn check_delete(
 /// Drives every operation one collection declares.
 async fn check_collection(
     client: &TmfClient,
+    store: &MemoryStore,
     base_url: &str,
     collection: &str,
     ops: &Declared,
@@ -302,7 +354,7 @@ async fn check_collection(
         let id = format!("seeded-{collection}");
         let mut body = seed_body(collection);
         body["id"] = json!(id);
-        let _ = create_one(client, base_url, collection, &body).await;
+        store.seed(collection, body);
         Some(id)
     };
 
@@ -338,10 +390,10 @@ async fn every_declared_collection_is_served_conformantly() {
 
     for (api, file) in SPECS {
         let collections = declared(&load(file));
-        let (client, base_url) = serve(api).await;
+        let (client, base_url, store) = serve(api).await;
 
         for (collection, ops) in &collections {
-            for problem in check_collection(&client, &base_url, collection, ops).await {
+            for problem in check_collection(&client, &store, &base_url, collection, ops).await {
                 failures.push(format!("{api}/{collection}: {problem}"));
             }
             checked += 1;
@@ -364,7 +416,7 @@ async fn every_declared_collection_is_served_conformantly() {
 /// the counters that let a client tell the difference.
 #[tokio::test]
 async fn paging_reports_partial_content_across_the_boundary() {
-    let (client, base_url) = serve("TMF620").await;
+    let (client, base_url, _) = serve("TMF620").await;
 
     for index in 0..5 {
         let mut request = TmfRequest::new(Method::POST, format!("{base_url}/productOffering"));
@@ -436,9 +488,9 @@ fn collections_shared_between_apis_are_the_same_resource() {
 /// notice — so the list is checked against the directory rather than trusted.
 #[test]
 fn every_vendored_specification_is_exercised() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("specs");
+    let dir = spec_dir();
     let on_disk: BTreeSet<String> = std::fs::read_dir(&dir)
-        .expect("the specs directory is missing")
+        .expect("the specifications are missing; fetch them with `scripts/references.sh`")
         .filter_map(|entry| {
             let path = entry.ok()?.path();
             (path.extension()? == "yaml")
@@ -469,5 +521,98 @@ fn the_suite_drives_every_declared_collection() {
         COLLECTION_COUNT,
         "the number of server collections changed; update the figure quoted in \
          README.md, src/lib.rs and site/"
+    );
+}
+
+/// Every method the server could be sent, on every path of every API, is
+/// answered by the declaration: a declared operation is served, an undeclared
+/// one is `405` with exactly the declared methods in `Allow`.
+///
+/// The suite above checks what each specification *does* declare. This is the
+/// other half — the half that let a TMF678 server create and delete bills.
+///
+/// declared-operations/SR-001
+#[tokio::test]
+async fn every_undeclared_operation_is_refused_with_its_allow_set() {
+    const METHODS: [Method; 5] = [
+        Method::GET,
+        Method::POST,
+        Method::PATCH,
+        Method::DELETE,
+        Method::PUT,
+    ];
+    let mut failures = Vec::new();
+    let mut refused = 0;
+
+    for api in SURFACES {
+        let (_, base_url, _) = serve(api.name).await;
+        let transport = ReqwestTransport::new().expect("a transport");
+        for collection in api.collections {
+            for on_item in [false, true] {
+                let allowed = collection.allowed_methods(on_item);
+                let path = if on_item {
+                    format!("{}/x1", collection.name)
+                } else {
+                    collection.name.to_owned()
+                };
+                let expected_allow = allowed
+                    .iter()
+                    .map(Method::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                for method in METHODS {
+                    let mut request = TmfRequest::new(method.clone(), format!("{base_url}/{path}"));
+                    request.headers.insert(
+                        header::CONTENT_TYPE,
+                        header::HeaderValue::from_static("application/json"),
+                    );
+                    request.body = Some(b"{}".to_vec().into());
+                    // The transport, not the client: a client reports a 405
+                    // as an error and drops the headers this checks.
+                    let response = match transport.execute(request).await {
+                        Ok(response) => response,
+                        Err(error) => {
+                            failures.push(format!("{} {method} /{path}: {error}", api.name));
+                            continue;
+                        }
+                    };
+                    let status = response.status;
+                    let allow = response
+                        .headers
+                        .get(header::ALLOW)
+                        .and_then(|v| v.to_str().ok())
+                        .map(ToOwned::to_owned);
+                    let declared = allowed.contains(&method);
+                    if declared && status == StatusCode::METHOD_NOT_ALLOWED {
+                        failures.push(format!(
+                            "{} {method} /{path} is declared but answered 405",
+                            api.name
+                        ));
+                    }
+                    if !declared && !allowed.is_empty() {
+                        refused += 1;
+                        if status != StatusCode::METHOD_NOT_ALLOWED {
+                            failures.push(format!(
+                                "{} {method} /{path} is undeclared but answered {status}",
+                                api.name
+                            ));
+                        } else if allow.as_deref() != Some(expected_allow.as_str()) {
+                            failures.push(format!(
+                                "{} {method} /{path}: Allow {allow:?}, expected {expected_allow:?}",
+                                api.name
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(refused > 0, "the sweep refused nothing");
+    assert!(
+        failures.is_empty(),
+        "{} operation(s) answered against the declaration:\n{}",
+        failures.len(),
+        failures.join("\n")
     );
 }

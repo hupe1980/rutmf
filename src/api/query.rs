@@ -60,10 +60,10 @@ impl FilterOp {
 ///
 /// # What the documents actually declare
 ///
-/// `fields`, `offset` and `limit` appear on every list endpoint of all fourteen
+/// `fields`, `offset` and `limit` appear on every list endpoint of all fifteen
 /// vendored specifications. `sort`, `filter`, `after` and `before` are declared
-/// by **TMF621 and TMF639 alone** — TMF630 defines sorting generally and most
-/// deployments implement it, so [`sort`](Self::sort) is offered everywhere, but
+/// by **TMF621, TMF635 and TMF639 alone** — TMF630 defines sorting generally and most deployments implement it, so
+/// [`sort`](Self::sort) is offered everywhere, but
 /// a server may ignore a parameter it never declared and hand back its own
 /// ordering.
 ///
@@ -225,9 +225,11 @@ impl Query {
 
     /// Starts the page after an opaque cursor (`after=`).
     ///
-    /// TMF621 and TMF639 declare cursor pagination alongside `offset`/`limit`
-    /// on three collections — `troubleTicket`, `troubleTicketSpecification` and
-    /// `resource` — and no other vendored specification declares it at all. The
+    /// TMF621, TMF635 and TMF639 declare cursor pagination alongside
+    /// `offset`/`limit` on five collections — `troubleTicket`,
+    /// `troubleTicketSpecification`, `productUsage`, TMF635's `exportJob` and
+    /// `resource` — and no
+    /// other vendored specification declares it at all. The
     /// cursor is opaque: it comes from a server, and the only thing a client may
     /// do with one is send it back.
     ///

@@ -1,6 +1,6 @@
 [package]
 name = "rutmf"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Ergonomic, v5-first Rust types and clients for the TM Forum Open API domain model (unofficial)"
@@ -10,12 +10,20 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["tmforum", "telco", "oda", "openapi", "bss"]
 categories = ["api-bindings", "data-structures"]
-# The conformance and coverage suites read `specs/` and `tests/fixtures/`, which
-# together are ~1.2 MiB — most of the package, and useless to a consumer. They
-# are excluded as a pair: shipping the tests without the specifications they
-# read would make `cargo test` on the published crate fail, which is worse than
-# not shipping them at all. Run the suites from the repository.
-exclude = ["/specs", "/tests", "/.github", "/.vscode", "/xtask", "/deny.toml"]
+# The tests read the TM Forum OpenAPI documents `scripts/references.sh` fetches,
+# so they ship only with the repository, not the crate.
+exclude = [
+    "/concepts",
+    "/specs",
+    "/.specify",
+    "/.claude",
+    "/scripts",
+    "/tests",
+    "/.github",
+    "/.vscode",
+    "/xtask",
+    "/deny.toml",
+]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -23,45 +31,55 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = { version = "1.0.151", features = ["preserve_order"] }
-indexmap = { version = "2.14.0", features = ["serde"] }
-chrono = { version = "0.4.45", default-features = false, features = ["serde", "std", "clock"] }
-rust_decimal = { version = "1.42.1", default-features = false, features = ["serde", "std"] }
-bon = "3.10.0"
-thiserror = "2.0.20"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+indexmap = { version = "2.14.2", features = ["serde"] }
+# RFC 3339 timestamps behind `core::Timestamp`; fixed offsets need no tz database.
+jiff = { version = "1.0.1", default-features = false, features = ["std", "serde"] }
+rust_decimal = { version = "1.43.0", default-features = false, features = ["serde", "std"] }
+bon = "3.10.3"
+# Error types of the client and server layers.
+thiserror = { version = "2.0.21", optional = true }
 
 # --- api (transport-agnostic client layer) ---
 futures-core = { version = "0.3.34", optional = true }
 async-trait = { version = "0.1.89", optional = true }
 http = { version = "1.5.0", optional = true }
-bytes = { version = "1.10.1", optional = true }
+bytes = { version = "1.12.2", optional = true }
 
 # --- transport-reqwest ---
-reqwest = { version = "0.13.4", optional = true, default-features = false, features = ["json"] }
-tokio = { version = "1.53.1", optional = true, default-features = false, features = ["sync", "time"] }
+reqwest = { version = "0.13.5", optional = true, default-features = false, features = ["json"] }
+tokio = { version = "1.54.1", optional = true, default-features = false, features = ["sync", "time"] }
 # --- optional server binding (the counterpart of transport-reqwest) ---
 axum = { version = "0.8.7", optional = true, default-features = false, features = ["http1", "tokio"] }
 
 # --- optional schema derives ---
-schemars = { version = "1.2.2", optional = true, features = ["chrono04", "rust_decimal1"] }
+schemars = { version = "1.2.3", optional = true, features = ["rust_decimal1"] }
 
 [dev-dependencies]
-tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
-# Reads the vendored OAS in `tests/coverage.rs`. A maintained `serde_yaml` fork.
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }
+# Reads the OpenAPI documents in the coverage suites. A maintained `serde_yaml` fork.
 serde_norway = "0.9.42"
 # `tests/server.rs` serves the server layer over a real socket.
 axum = { version = "0.8.7", features = ["http1", "tokio"] }
 futures = "0.3.34"
-proptest = "1.11.0"
+proptest = "1.12.0"
 async-trait = "0.1.89"
-bytes = "1.10.1"
+bytes = "1.12.2"
 http = "1.5.0"
-similar-asserts = "1.7.0"
-# Used by `tests/conformance.rs` to canonicalise timestamps before comparison.
-chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+similar-asserts = "2.0.0"
 
 [features]
-default = ["party", "customer", "product", "order", "ticket", "alarm", "bill", "account"]
+default = [
+    "party",
+    "customer",
+    "product",
+    "order",
+    "ticket",
+    "alarm",
+    "bill",
+    "account",
+    "usage",
+]
 
 # --- domain models (pure types, no I/O) ---
 party = []
@@ -81,9 +99,17 @@ alarm = ["service"]
 bill = ["party", "product"]
 # An account names the parties who hold it and how they are contacted.
 account = ["party"]
+# Rated usage prices a product, for parties — TMF635.
+usage = ["party", "product"]
 
 # --- client layer ---
-api = ["dep:futures-core", "dep:async-trait", "dep:http", "dep:bytes"]
+api = [
+    "dep:futures-core",
+    "dep:async-trait",
+    "dep:http",
+    "dep:bytes",
+    "dep:thiserror",
+]
 transport-reqwest = [
     "api",
     "dep:reqwest",
@@ -111,6 +137,7 @@ api-tmf638 = ["api", "service"]
 api-tmf639 = ["api", "resource"]
 api-tmf669 = ["api", "party"]
 api-tmf679 = ["api", "product"]
+api-tmf635 = ["api", "usage"]
 
 # --- server layer ---
 server = ["api", "dep:async-trait"]
@@ -130,6 +157,7 @@ full = [
     "api-tmf629",
     "api-tmf632",
     "api-tmf634",
+    "api-tmf635",
     "api-tmf637",
     "api-tmf638",
     "api-tmf639",

@@ -38,15 +38,84 @@ impl ResourceStore for Catalog {
 Then serve it:
 
 ```rust
-let handler = TmfHandler::new(
-    "https://mycsp.com/tmf-api/productCatalogManagement/v5",
-    catalog,
-);
+use rutmf::api::tmf620;
+
+// Rooted at https://mycsp.com/tmf-api/productCatalogManagement/v5.
+let handler = TmfHandler::for_host(&tmf620::API, "https://mycsp.com", catalog);
 
 let app = axum::Router::new().nest(
-    "/tmf-api/productCatalogManagement/v5",
+    &format!("/{}", tmf620::API.path),
     rutmf::server::router(handler),   // feature: server-axum
 );
+```
+
+`TmfHandler::new(&tmf620::API, base_url, catalog)` takes a full base URL instead,
+for when the API is not mounted at its conventional root.
+
+## Only what the specification declares
+
+The handler is built for one API, and the API decides which operations exist.
+Every `rutmf::api::tmfXXX` module publishes its specification's surface as
+`API`: each collection, including `hub` and the ones this crate does not model,
+with the operations declared on it.
+
+```rust
+pub const API: Api = Api::new(
+    "TMF678",
+    API_PATH,
+    SPEC_VERSION,
+    &[
+        Collection::read_only("appliedCustomerBillingRate"),
+        Collection::read_only("billCycle"),
+        Collection::new(
+            "customerBill",
+            &[Operation::List, Operation::Retrieve, Operation::Update],
+        ),
+        Collection::task("customerBillOnDemand"),
+        Collection::new("hub", &[Operation::Create, Operation::Delete]),
+    ],
+);
+```
+
+Anything outside it is refused before the body is parsed, before a precondition
+is evaluated, before the store is called and before a subscriber is notified:
+
+| Request to a TMF678 server | Answer |
+|---|---|
+| `POST /customerBill` | `405`, `Allow: GET` |
+| `DELETE /customerBill/B1` | `405`, `Allow: GET, PATCH` |
+| `PUT /customerBill/B1` | `405`, `Allow: GET, PATCH` |
+| `GET /hub/h1` | `405`, `Allow: DELETE` |
+| `POST /listener` | `404` |
+| `PATCH /customerBill/B1` | served |
+
+So an issued bill cannot be created or deleted through the API, and your store
+contains no guard to say so. The `axum` adapter refuses before it reads the
+body; an adapter of your own gets the same check from
+`TmfHandler::refusal(&method, &url)`.
+
+The surfaces are not transcribed and trusted: the test suite compares every
+`API` with its pinned specification document in both directions, and sends every
+method to every path of all fifteen APIs to check the `405`s and their `Allow`
+sets.
+
+**Serving an API this crate does not cover** — a vendor API, a v4 one — is the
+same call with an `Api` you declare:
+
+```rust
+use rutmf::api::{Api, Collection, Operation};
+
+const USAGE: Api = Api::new(
+    "ACME-USAGE",
+    "tmf-api/acmeUsage/v1",
+    "1.0.0",
+    &[
+        Collection::read_only("usageRecord"),
+        Collection::new("hub", &[Operation::Create, Operation::Delete]),
+    ],
+);
+
+let handler = TmfHandler::for_host(&USAGE, "https://mycsp.com", store);
 ```
 
 ## Why the split is by concern, not by operation
@@ -63,6 +132,7 @@ So the split is:
 
 | Concern | Who decides |
 |---|---|
+| Which operations exist on which collection | the specification — `tmfXXX::API`, enforced by `TmfHandler` |
 | Routing, filtering, sorting, `fields=`, paging, count headers, `200` vs `206`, four `PATCH` content types, `ETag`/`If-Match`, `Location`, error bodies, status codes | `TmfHandler` — once, for every API |
 | What is stored, what the business rules are, what a conflict means | `ResourceStore` — five methods, yours |
 
@@ -97,7 +167,7 @@ rather than quietly returning page one — a client looping until it sees nothin
 new would otherwise never stop.
 
 **An unsupported filter is refused, not ignored.** The handler implements
-attribute filtering, not the JSONPath `filter` that TMF621 and TMF639 declare.
+attribute filtering, not the JSONPath `filter` that TMF621, TMF635 and TMF639 declare.
 A request carrying one gets a `400` with a TMF630 body. Ignoring it would answer
 a request to *narrow* a collection with the whole collection, which is the wrong
 way to be wrong.
@@ -124,7 +194,7 @@ A collection `GET` that names no `limit` returns everything the filters matched,
 so the size of the response is chosen by whoever sends the request.
 
 ```rust
-let handler = TmfHandler::new(base_url, catalog).with_max_page_size(100);
+let handler = TmfHandler::new(&tmf620::API, base_url, catalog).with_max_page_size(100);
 ```
 
 It lowers a `limit` larger than the maximum and supplies one where the request
@@ -226,7 +296,8 @@ impl IdGenerator for Sequence {
     }
 }
 
-let handler = TmfHandler::new(base_url, catalog).with_id_generator(Sequence(AtomicU64::new(1)));
+let handler = TmfHandler::new(&tmf620::API, base_url, catalog)
+    .with_id_generator(Sequence(AtomicU64::new(1)));
 ```
 
 The default gives 128 unpredictable bits. A sequential id leaks how many
@@ -241,7 +312,7 @@ the creating request left the choice to the server.
 
 **The test server is not a second implementation.** `MockTmfServer` *is*
 `TmfHandler<MemoryStore>` plus a `Transport` shim. The semantics the
-591-fixture conformance corpus exercises are the same code a real deployment
+610-fixture conformance corpus exercises are the same code a real deployment
 runs, so the corpus vouches for both and the two cannot drift.
 
 **The client checks the server.** The repository's `tests/server.rs` serves a
@@ -276,7 +347,7 @@ registered for the name TMF634 declares receives nothing, ever, from a server
 raising the other spelling, and neither end reports anything.
 
 So `rutmf::server::state_change_kind` records which collections use which,
-transcribed from the vendored `/listener/…` paths, and `tests/coverage.rs`
+transcribed from the specifications’ `/listener/…` paths, and `tests/coverage.rs`
 re-reads those paths and fails if it has drifted:
 
 ```rust
@@ -306,7 +377,7 @@ impl Notifier for Enqueue {
     }
 }
 
-let handler = TmfHandler::new(base_url, catalog).with_notifier(Enqueue(tx));
+let handler = TmfHandler::new(&tmf620::API, base_url, catalog).with_notifier(Enqueue(tx));
 ```
 
 `notify` is awaited before the handler answers, so hand the event to a channel
@@ -328,6 +399,42 @@ deployment runs.
 > subscribe. Your store then receives `create`/`get`/`delete` for `hub` and has
 > to keep those rows somewhere; the `serve_catalog` example holds them in a
 > second `Vec`.
+
+## Keeping rated usage append-only
+
+TMF635 declares `PATCH` and `DELETE` on `productUsage`, so the handler serves
+them — the protocol allows rewriting a usage record. A billing system usually
+must not: a rated record is the evidence a bill was built from. That is a store
+policy, and it is a few lines:
+
+```rust
+#[async_trait::async_trait]
+impl ResourceStore for UsageStore {
+    async fn replace(&self, c: &str, id: &str, next: Value) -> StoreResult<Option<Value>> {
+        let Some(current) = self.get(c, id).await? else { return Ok(None) };
+        let rated = matches!(current["status"].as_str(), Some("rated" | "corrected"));
+        // A rated record may only be superseded, and nothing else about it may change.
+        let only_superseded = next["status"] == "superseded"
+            && strip(&next, "status", "lastUpdate") == strip(&current, "status", "lastUpdate");
+        if rated && !only_superseded {
+            return Err(StoreError::Forbidden(
+                "a rated usage record is evidence; record a corrected one and supersede this".into(),
+            ));
+        }
+        self.write(c, id, next).await
+    }
+
+    async fn delete(&self, c: &str, id: &str) -> StoreResult<bool> {
+        Err(StoreError::Forbidden("usage records are never deleted".into()))
+    }
+    // list, get, create — as any other store.
+}
+```
+
+A client correcting usage then records a new `corrected` record and `PATCH`es
+the old one's `status` to `superseded`, which this store allows; anything else
+is a `403` with the reason in the TMF630 error body. See
+[Calling an API](@/docs/calling-an-api.md#not-every-client-has-the-same-methods).
 
 ## What it deliberately does not do
 

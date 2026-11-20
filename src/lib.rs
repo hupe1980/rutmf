@@ -25,15 +25,15 @@
 //! them distinct so the compiler catches a malformed request:
 //!
 //! ```
+//! use rutmf::core::Timestamp;
 //! use rutmf::product::ProductOfferingCreate;
-//! use chrono::Utc;
 //!
 //! // `name`, `lifecycle_status` and `last_update` are required on create —
 //! // omitting one is a compile error, not a 400 from the server.
 //! let body = ProductOfferingCreate::builder()
 //!     .name("Business Internet")
 //!     .lifecycle_status("Active")
-//!     .last_update(Utc::now())
+//!     .last_update(Timestamp::now())
 //!     .build();
 //! ```
 //!
@@ -98,7 +98,7 @@
 //! assert!(update.deletes("description"));
 //! ```
 //!
-//! This is enforced over **all 591 vendored TM Forum examples**, every one of
+//! This is enforced over **all 610 vendored TM Forum examples**, every one of
 //! them, by `tests/conformance.rs`.
 //!
 //! ## Round-tripping is not coverage
@@ -106,11 +106,11 @@
 //! An unknown member survives in [`Extensions`] whether or not the model
 //! understands it, so a payload round-trips perfectly even if the typed model
 //! misses half of it. `tests/coverage.rs` is what closes that gap: it reads the
-//! vendored `OpenAPI` documents and fails if any specified member has no typed
+//! pinned `OpenAPI` documents and fails if any specified member has no typed
 //! field, if any typed field is absent from the specification, if requiredness
 //! disagrees, or if a member the specification gives a closed vocabulary is
-//! typed as a `String` rather than an enumeration. It checks **215 Rust types
-//! against 462 v5 schemas**. Both suites are needed, and neither substitutes for
+//! typed as a `String` rather than an enumeration. It checks **219 Rust types
+//! against 490 v5 schemas**. Both suites are needed, and neither substitutes for
 //! the other.
 //!
 //! [`Extensions`]: crate::core::Extensions
@@ -124,7 +124,7 @@
 //! |---|---|
 //! | `party`, `customer`, `product`, `order` | domain models (**default**) |
 //! | `ticket`, `alarm` | the assurance domain: TMF621 tickets, TMF642 alarms |
-//! | `bill`, `account` | monetisation: TMF678 bills, TMF666 accounts |
+//! | `bill`, `account`, `usage` | monetisation: TMF678 bills, TMF666 accounts, TMF635 rated usage |
 //! | `service`, `resource` | the inventory-side models — also on by default, because `product` needs them for its `realizingService` and `supportingResource` references |
 //! | `api` | the transport-agnostic client layer |
 //! | `transport-reqwest` | a ready-made `reqwest` transport, with `OAuth2` and retries |
@@ -132,6 +132,7 @@
 //! | `api-tmf621` | Trouble Ticket (TMF621 v5.0.1) |
 //! | `api-tmf642` | Alarm Management (TMF642 v5.0.1) |
 //! | `api-tmf666` | Account Management (TMF666 v5.0.0) |
+//! | `api-tmf635` | Product Usage Management (TMF635 v5.0.0) |
 //! | `api-tmf678` | Customer Bill (TMF678 v5.0.0) |
 //! | `api-tmf622` | Product Ordering (TMF622 v5.0.0) |
 //! | `api-tmf629` | Customer Management (TMF629 v5.0.1) |
@@ -152,6 +153,10 @@
 #![doc(html_root_url = "https://docs.rs/rutmf")]
 
 pub mod core;
+
+/// The date-time library behind [`core::Timestamp`], re-exported so the
+/// version you build with is always the one the crate uses.
+pub use jiff;
 
 #[cfg(feature = "party")]
 #[cfg_attr(docsrs, doc(cfg(feature = "party")))]
@@ -181,6 +186,10 @@ pub mod account;
 #[cfg_attr(docsrs, doc(cfg(feature = "bill")))]
 pub mod bill;
 
+#[cfg(feature = "usage")]
+#[cfg_attr(docsrs, doc(cfg(feature = "usage")))]
+pub mod usage;
+
 #[cfg(feature = "alarm")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alarm")))]
 pub mod alarm;
@@ -208,7 +217,7 @@ pub mod mock;
 /// The traits whose methods are otherwise invisible.
 ///
 /// `reference()` on a resource, `resolve()` on a `Ref`, `fetch()` on a client,
-/// `register_listener()` on any of the fourteen — each lives on a trait, and
+/// `register_listener()` on any of the fifteen — each lives on a trait, and
 /// Rust does not offer a trait method until the trait is in scope.
 ///
 /// **Traits, not types.** [`Query`] comes too, because those calls take one.
@@ -223,7 +232,7 @@ pub mod mock;
 /// ```
 ///
 /// Concrete types stay in their domain module: `rutmf::product::ProductOffering`
-/// says which API it belongs to, and several of the fourteen declare a `Product`
+/// says which API it belongs to, and several of the fifteen declare a `Product`
 /// or a `Category` of their own.
 ///
 /// [`Query`]: crate::api::Query
@@ -232,7 +241,7 @@ pub mod prelude {
 
     #[cfg(feature = "api")]
     #[cfg_attr(docsrs, doc(cfg(feature = "api")))]
-    pub use crate::api::{Conditional, HubOps, Query, ResolveRef};
+    pub use crate::api::{Conditional, HubLookup, HubOps, Query, ResolveRef};
 }
 
 /// The TM Forum Open API **major** version this crate targets.

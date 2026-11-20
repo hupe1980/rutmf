@@ -157,6 +157,12 @@ resolvable! {
     crate::product::QueryProductOfferingQualification => "queryProductOfferingQualification",
 }
 
+#[cfg(feature = "usage")]
+resolvable! {
+    // TMF635: a bill line's usage, followed from its `EntityRef`.
+    crate::usage::ProductUsage => "productUsage",
+}
+
 #[cfg(feature = "service")]
 resolvable! {
     crate::service::Service => "service",

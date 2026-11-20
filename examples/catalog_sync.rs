@@ -9,14 +9,13 @@
 
 use std::collections::HashMap;
 
-use chrono::{TimeZone, Utc};
 use futures::StreamExt;
 use rust_decimal::Decimal;
 use serde_json::json;
 use std::str::FromStr;
 
 use rutmf::api::{Query, ResolveRef, tmf620::ProductCatalogClient};
-use rutmf::core::{Money, Ref, TimePeriod};
+use rutmf::core::{Money, Ref, TimePeriod, Timestamp};
 use rutmf::mock::MockTmfServer;
 use rutmf::product::{ProductOffering, ProductOfferingCreate, ProductSpecification};
 
@@ -67,11 +66,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let body = ProductOfferingCreate::builder()
         .name("Business Internet 1G")
         .lifecycle_status("Active")
-        .last_update(Utc::now())
+        .last_update(Timestamp::now())
         .description("Symmetric gigabit fibre for business premises")
         .is_sellable(true)
         .valid_for(TimePeriod::starting(
-            Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+            "2026-01-01T00:00:00Z".parse::<Timestamp>()?,
         ))
         .product_specification(Ref::<ProductSpecification>::new("9881").with_name("Fibre Access"))
         .build();

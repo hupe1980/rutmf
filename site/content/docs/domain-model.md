@@ -20,6 +20,7 @@ caught by the server at runtime. Keeping them apart moves that failure to compil
 time:
 
 ```rust
+use rutmf::core::Timestamp;
 use rutmf::product::ProductOfferingCreate;
 
 // `name`, `lifecycle_status` and `last_update` are required by the `_FVO`
@@ -27,7 +28,7 @@ use rutmf::product::ProductOfferingCreate;
 let body = ProductOfferingCreate::builder()
     .name("Business Internet")
     .lifecycle_status("Active")
-    .last_update(chrono::Utc::now())
+    .last_update(Timestamp::now())
     .build();
 ```
 
@@ -87,7 +88,7 @@ It is **not** byte-for-byte: known members are emitted in declaration order, JSO
 number formatting is normalised, and fractional seconds are re-emitted in SI
 groups. Compare with `serde_json::Value` equality, not string equality.
 
-This property is enforced across all 591 vendored specification examples plus
+This property is enforced across all 610 vendored specification examples plus
 `proptest` generators.
 
 ### The one exception: an explicit `null`
@@ -151,12 +152,73 @@ With a client in hand, a reference resolves to the resource it names — no
 turbofish, no path string. See
 [Calling an API](@/docs/calling-an-api.md#following-a-reference).
 
+### A reference with no `…Ref` class of its own
+
+TMF635 declares no `ProductUsageRef`, so `Ref<ProductUsage>` is the generic v5
+reference every document declares:
+
+```rust
+use rutmf::usage::ProductUsage;
+
+let usage: Ref<ProductUsage> = Ref::new("U-1");
+// Serialises with "@type": "EntityRef"
+//                 "@referredType": "ProductUsage"
+```
+
+### Why this amount? A bill line and its usage
+
+TMF678's `AppliedCustomerBillingRate` has no member naming the usage it charges
+for. The crate writes the link down once, as a convention every v5 consumer can
+read: one `ObjectArrayCharacteristic` named `productUsage` holding `EntityRef`s to
+the usage records.
+
+```rust
+use rutmf::bill::AppliedCustomerBillingRate;
+
+// Rating attaches the records it priced…
+let line = AppliedCustomerBillingRate::builder()
+    .name("Roaming data, March")
+    .build()
+    .with_product_usages([Ref::new("U-1"), Ref::new("U-2")]);
+
+// …and self-care reads them back, then resolves each against TMF635.
+for usage in line.product_usages() {
+    let record = usage.resolve(usages.inner(), &Query::new()).await?;
+}
+```
+
+Reading never fails: a line from a server that does not follow the convention,
+or follows it badly, simply has no usage. With the `usage` feature only — `bill`
+does not depend on it.
+
 ### Four schemas that are not references
 
 `QuoteItemRef`, `AgreementItemRef`, `ProductOrderItemRef` and
 `ProductOfferingQualificationItemRef` are named `…Ref` but address a line
 *within* a parent resource and carry no `id` at all. They are their own structs,
 because `Ref<T>` requires an `id` and would fail to parse them outright.
+
+## Timestamps keep their offset
+
+Every `date-time` member is a `rutmf::core::Timestamp`: an RFC 3339 instant that
+remembers how it was written. `2020-09-23T16:42:23-04:00` comes back as exactly
+that, and `Z` stays `Z` rather than turning into `+00:00` — RFC 9557 gives the two
+different meanings. Equality and ordering compare the instant, so two spellings
+of one moment are equal.
+
+```rust
+use rutmf::core::Timestamp;
+use rutmf::jiff::ToSpan;
+
+let issued: Timestamp = "2026-03-01T09:00:00+01:00".parse()?;
+let due: Timestamp = issued.to_zoned_datetime().checked_add(14.days())?.into();
+assert_eq!(due.to_string(), "2026-03-15T09:00:00+01:00");
+```
+
+Parsing is strict: a date without a time, a time without an offset, an ISO 8601
+basic-format spelling or an impossible date (`2020-01-00`) is an error, not a
+guess. The arithmetic is [`jiff`](https://docs.rs/jiff)'s, re-exported as
+`rutmf::jiff` so your version always matches the crate's.
 
 ## Money is a decimal
 
