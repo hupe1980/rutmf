@@ -70,7 +70,7 @@ msrv = "1.88"
 fixture_count = "610"
 type_count = "219"
 schema_count = "490"
-api_count = "14"
+api_count = "15"
 
 [[extra.nav]]
 name = "Docs"
