@@ -1,0 +1,26 @@
+{
+  "source": "tmforum-apis/TMF635_UsageManagement @ TMF635-Product_Usage_Management-v5.0.0.oas.yaml",
+  "license": "Apache-2.0",
+  "spec_version": "5.0.0",
+  "examples": {
+    "ExportJobCreate_request.json": "ExportJobCreate_request",
+    "ExportJobDelete_request.json": "ExportJobDelete_request",
+    "ExportJobStateChange_request.json": "ExportJobStateChange_request",
+    "ExportJob_Create_example_request.json": "ExportJob_Create_example_request",
+    "ExportJob_Create_example_response.json": "ExportJob_Create_example_response",
+    "Export_Job_list_example_response.json": "Export_Job_list_example_response",
+    "Export_Job_retrieve_example_response.json": "Export_Job_retrieve_example_response",
+    "ProductUsage_Create_example_request.json": "ProductUsage_Create_example_request",
+    "ProductUsage_Create_example_response.json": "ProductUsage_Create_example_response",
+    "Product_Usage_list_example_response.json": "Product_Usage_list_example_response",
+    "Product_Usage_retrieve_example_response.json": "Product_Usage_retrieve_example_response",
+    "Updating_a_product_usage_with_json-patch-query_json_content_type_request.json": "Updating_a_product_usage_with_json-patch-query_json_content_type_request",
+    "Updating_a_product_usage_with_json-patch-query_json_content_type_response.json": "Updating_a_product_usage_with_json-patch-query_json_content_type_response",
+    "Updating_a_product_usage_with_json-patch_json_content_type_request.json": "Updating_a_product_usage_with_json-patch_json_content_type_request",
+    "Updating_a_product_usage_with_json-patch_json_content_type_response.json": "Updating_a_product_usage_with_json-patch_json_content_type_response",
+    "Updating_a_product_usage_with_json_content_type_request.json": "Updating_a_product_usage_with_json_content_type_request",
+    "Updating_a_product_usage_with_json_content_type_response.json": "Updating_a_product_usage_with_json_content_type_response",
+    "Updating_a_product_usage_with_merge-patch_json_content_type_request.json": "Updating_a_product_usage_with_merge-patch_json_content_type_request",
+    "Updating_a_product_usage_with_merge-patch_json_content_type_response.json": "Updating_a_product_usage_with_merge-patch_json_content_type_response"
+  }
+}

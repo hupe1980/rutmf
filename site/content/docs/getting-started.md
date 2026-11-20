@@ -88,7 +88,7 @@ use rutmf::prelude::*;
 
 Traits and `Query`, nothing else. Concrete types stay where they are:
 `rutmf::product::ProductOffering` says which API it belongs to, and several of
-the fourteen declare a `Product` or a `Category` of their own.
+the fifteen declare a `Product` or a `Category` of their own.
 
 ## Choosing features
 
@@ -98,7 +98,7 @@ never drags a TLS stack into your dependency graph by surprise.
 
 | Feature | Default | Enables |
 |---|---|---|
-| `party`, `customer`, `product`, `order`, `service`, `resource`, `ticket`, `alarm`, `bill`, `account` | ✅ | domain models (pure types, no I/O) |
+| `party`, `customer`, `product`, `order`, `service`, `resource`, `ticket`, `alarm`, `bill`, `account`, `usage` | ✅ | domain models (pure types, no I/O) |
 | `api` | | the transport-agnostic client layer |
 | `transport-reqwest` | | a ready-made `reqwest` transport, with OAuth2 and retries |
 | `api-tmf620` | | Product Catalog Management client |
@@ -107,12 +107,15 @@ never drags a TLS stack into your dependency graph by surprise.
 | `api-tmf629` | | Customer Management client |
 | `api-tmf632` | | Party Management client |
 | `api-tmf634` | | Resource Catalog Management client |
+| `api-tmf635` | | Product Usage Management client |
 | `api-tmf637` | | Product Inventory Management client |
 | `api-tmf638` | | Service Inventory Management client |
 | `api-tmf639` | | Resource Inventory Management client |
 | `api-tmf642` | | Alarm Management client |
 | `api-tmf666` | | Account Management client |
+| `api-tmf669` | | Party Role Management client |
 | `api-tmf678` | | Customer Bill client |
+| `api-tmf679` | | Product Offering Qualification client |
 | `server` | | implement a TMF API: `ResourceStore` + `TmfHandler` |
 | `server-axum` | | a ready-made `axum` `Router` for the above |
 | `mock` | | an in-process TMF server for tests |

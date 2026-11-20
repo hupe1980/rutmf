@@ -17,7 +17,7 @@ use std::sync::Mutex;
 use serde_json::{Value, json};
 
 use rutmf::api::{
-    FilterOp, HubCreate, HubOps, Query, ReqwestTransport, tmf620::ProductCatalogClient,
+    FilterOp, HubCreate, HubOps, Query, ReqwestTransport, tmf620, tmf620::ProductCatalogClient,
 };
 use rutmf::core::{EventKind, Timestamp};
 use rutmf::product::{ProductOffering, ProductOfferingCreate, ProductOfferingUpdate};
@@ -206,12 +206,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
-    let base_url = format!("http://127.0.0.1:{port}/tmf-api/productCatalogManagement/v5");
+    // The handler serves exactly what TMF620 declares, at its conventional root.
+    let handler = TmfHandler::for_host(&tmf620::API, &format!("http://127.0.0.1:{port}"), catalog)
+        .with_notifier(Announce);
+    let base_url = handler.base_url().to_owned();
     println!("== serving TMF620 on {base_url} ==\n");
 
     let app = axum::Router::new().nest(
-        "/tmf-api/productCatalogManagement/v5",
-        rutmf::server::router(TmfHandler::new(&base_url, catalog).with_notifier(Announce)),
+        &format!("/{}", tmf620::API.path),
+        rutmf::server::router(handler),
     );
     tokio::spawn(async move { axum::serve(listener, app).await });
 

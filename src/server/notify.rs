@@ -152,7 +152,7 @@ const STATUS_CHANGE_COLLECTIONS: &[&str] = &[
 
 /// Which event a lifecycle move on `collection` raises.
 ///
-/// Twelve of the fourteen vendored APIs raise `…StateChangeEvent`; TMF621 and
+/// Thirteen of the fifteen vendored APIs raise `…StateChangeEvent`; TMF621 and
 /// TMF634 raise `…StatusChangeEvent` for the same change, over a member TMF634
 /// still spells `lifecycleStatus`. The difference is not visible in the
 /// resource, so it has to be known — and a subscriber filters on the name, so a

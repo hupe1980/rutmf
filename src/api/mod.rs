@@ -98,6 +98,7 @@ mod patch;
 mod query;
 mod resolve;
 mod retry;
+mod surface;
 mod transport;
 
 #[cfg(feature = "transport-reqwest")]
@@ -127,6 +128,10 @@ pub mod tmf632;
 #[cfg(feature = "api-tmf634")]
 #[cfg_attr(docsrs, doc(cfg(feature = "api-tmf634")))]
 pub mod tmf634;
+
+#[cfg(feature = "api-tmf635")]
+#[cfg_attr(docsrs, doc(cfg(feature = "api-tmf635")))]
+pub mod tmf635;
 
 #[cfg(feature = "api-tmf637")]
 #[cfg_attr(docsrs, doc(cfg(feature = "api-tmf637")))]
@@ -184,12 +189,13 @@ pub(crate) use client::interpret_failure;
 pub use client::{TmfClient, same_origin};
 pub use conditional::{Conditional, EntityTag, Tagged};
 pub use error::{Error, Result};
-pub use hub::{Hub, HubCreate, HubOps};
+pub use hub::{Hub, HubCreate, HubLookup, HubOps};
 pub use page::{DEFAULT_PAGE_SIZE, Page, PageRequest, PageStream, next_link, paginate};
 pub use patch::Patch;
 pub use query::{FilterOp, Query};
 pub use resolve::{Resolvable, ResolveRef};
 pub use retry::{RetryPolicy, RetryTransport, Sleeper};
+pub use surface::{Api, Collection, Operation};
 
 #[cfg(feature = "transport-reqwest")]
 #[cfg_attr(docsrs, doc(cfg(feature = "transport-reqwest")))]

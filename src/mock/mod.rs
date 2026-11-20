@@ -70,7 +70,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde_json::Value;
 
-use crate::api::{Error, Result, TmfRequest, TmfResponse, Transport};
+use crate::api::{Api, Error, Result, TmfRequest, TmfResponse, Transport};
 use crate::server::{Listener, MemoryStore, Notifier, TmfHandler};
 
 /// The base URL a [`MockTmfServer`] answers on unless told otherwise.
@@ -78,6 +78,9 @@ use crate::server::{Listener, MemoryStore, Notifier, TmfHandler};
 /// The host is under the reserved `.test` TLD (RFC 2606), so a request that
 /// escapes the mock cannot reach a real system.
 pub const DEFAULT_BASE_URL: &str = "http://mock.tmforum.test/tmf-api/v5";
+
+/// The host every mock answers on.
+const MOCK_HOST: &str = "http://mock.tmforum.test";
 
 /// A notification the server would have delivered to a registered listener.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,14 +159,42 @@ impl MockTmfServer {
     /// `GET /…/v5/productOffering/7655` (an item) without a hard-coded list of
     /// collection names — so a mock of an API this crate has no client for
     /// still routes correctly.
+    ///
+    /// Like [`new`](Self::new), it serves any collection with every operation,
+    /// so one mock can stand in for several APIs at once. Use
+    /// [`for_api`](Self::for_api) for a mock that refuses what one API does
+    /// not declare.
     #[must_use]
     pub fn with_base_url(base_url: impl Into<String>) -> Self {
+        Self::from_handler(TmfHandler::serving_anything(base_url, MemoryStore::new()))
+    }
+
+    /// Creates an empty server that behaves exactly like a server for `api`:
+    /// rooted at `api`'s conventional path under the mock host, and answering
+    /// `405` with `Allow` to every method `api` does not declare and `404` to
+    /// every collection it does not declare.
+    ///
+    /// ```
+    /// # #[cfg(feature = "api-tmf678")] {
+    /// use rutmf::api::tmf678;
+    /// use rutmf::mock::MockTmfServer;
+    ///
+    /// let server = MockTmfServer::for_api(&tmf678::API);
+    /// assert_eq!(
+    ///     server.base_url(),
+    ///     "http://mock.tmforum.test/tmf-api/customerBillManagement/v5"
+    /// );
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn for_api(api: &'static Api) -> Self {
+        Self::from_handler(TmfHandler::for_host(api, MOCK_HOST, MemoryStore::new()))
+    }
+
+    fn from_handler(handler: TmfHandler<MemoryStore>) -> Self {
         let notifications = Arc::new(Mutex::new(Vec::new()));
         Self {
-            handler: Arc::new(
-                TmfHandler::new(base_url, MemoryStore::new())
-                    .with_notifier(Recorder(Arc::clone(&notifications))),
-            ),
+            handler: Arc::new(handler.with_notifier(Recorder(Arc::clone(&notifications)))),
             notifications,
         }
     }

@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use super::attachment::Attachment;
 use super::macros::{tmf_struct, tmf_value};
+use super::time::Timestamp;
 
 tmf_value! {
     /// A monetary amount in a given currency.
@@ -145,47 +146,11 @@ impl TimePeriod {
     }
 }
 
-/// A TM Forum timestamp: an RFC 3339 instant that keeps the offset it arrived
-/// with.
-///
-/// TMF payloads carry timestamps as RFC 3339 strings, and TM Forum's own
-/// examples use offsets other than `Z` — `2020-09-23T16:42:23-04:00` appears in
-/// the TMF620 v5 examples. Parsing those into `Timestamp` would re-emit
-/// them as `2020-09-23T20:42:23Z`: the same instant, a different document, and
-/// a spurious diff in any middleware that compares payloads. So the model keeps
-/// the offset.
-///
-/// Construction stays ergonomic, because every builder setter takes
-/// `impl Into<_>` and chrono converts:
-///
-/// ```
-/// use chrono::Utc;
-/// use rutmf::product::ProductOfferingCreate;
-///
-/// let body = ProductOfferingCreate::builder()
-///     .name("Business Internet")
-///     .lifecycle_status("Active")
-///     .last_update(Utc::now()) // `Timestamp` converts on the way in
-///     .build();
-/// ```
-///
-/// To compare or do arithmetic against UTC, call
-/// [`to_utc`](chrono::DateTime::to_utc):
-///
-/// ```
-/// use chrono::Utc;
-/// use rutmf::core::Timestamp;
-///
-/// let t: Timestamp = "2020-09-23T16:42:23-04:00".parse().unwrap();
-/// assert!(t.to_utc() < Utc::now());
-/// ```
-pub type Timestamp = chrono::DateTime<chrono::FixedOffset>;
-
 tmf_struct! {
     @name = "TaxDefinition";
     /// One tax a [`TaxExemptionCertificate`] applies to.
     ///
-    /// Eight of the fourteen vendored specifications declare this schema, byte
+    /// Eight of the fifteen vendored specifications declare this schema, byte
     /// for byte, so it is one type here rather than one per domain.
     pub struct TaxDefinition {
         /// Identifier of the tax.

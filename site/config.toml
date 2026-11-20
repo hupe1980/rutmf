@@ -6,7 +6,7 @@
 # somewhere that does not serve the page.
 base_url = "https://hupe1980.github.io/rutmf"
 title = "rutmf"
-description = "Ergonomic, v5-first Rust types and clients for the TM Forum Open APIs. Typed references, real decimals, guaranteed round-trip fidelity, and a conformance suite over 591 official specification examples."
+description = "Ergonomic, v5-first Rust types and clients for the TM Forum Open APIs. Typed references, real decimals, guaranteed round-trip fidelity, and a conformance suite over 610 official specification examples."
 
 default_language = "en"
 compile_sass = true
@@ -57,7 +57,7 @@ skip_prefixes = [
 [extra]
 # Consumed by templates/base.html for navigation, meta tags and structured data.
 crate_name = "rutmf"
-crate_version = "0.1"
+crate_version = "0.2"
 repo_url = "https://github.com/hupe1980/rutmf"
 docsrs_url = "https://docs.rs/rutmf"
 cratesio_url = "https://crates.io/crates/rutmf"
@@ -67,9 +67,9 @@ msrv = "1.88"
 
 # Headline figures. Every one is asserted by a test in the repository, so if one
 # changes here without the suite changing, the suite is the one that is right.
-fixture_count = "591"
-type_count = "215"
-schema_count = "462"
+fixture_count = "610"
+type_count = "219"
+schema_count = "490"
 api_count = "14"
 
 [[extra.nav]]

@@ -119,21 +119,29 @@ pub trait HubOps {
     async fn unregister_listener(&self, id: &str) -> Result<()> {
         self.hub_client().delete(HUB, id).await
     }
+}
 
+/// Reading a subscription back: `GET /hub/{id}`.
+///
+/// Separate from [`HubOps`] because few APIs declare it: of the fifteen this
+/// crate covers, only **TMF621, TMF629, TMF635, TMF639, TMF642 and TMF679** do,
+/// and only their clients implement this trait. The other nine expose `POST /hub`
+/// and `DELETE /hub/{id}` and nothing else, so a client for one of them has no
+/// `get_listener` to call — rather than one that is answered `405`.
+///
+/// None of the fifteen lets you *list* subscriptions — there is no `GET /hub`.
+/// Keep the id you were given at registration; it is the only handle on the
+/// subscription you will get.
+///
+/// Which clients implement this is not a remembered fact:
+/// `the_hub_surface_is_what_the_specifications_declare` in `tests/coverage.rs`
+/// holds the implementors equal to the APIs whose `API` declares it.
+#[allow(
+    async_fn_in_trait,
+    reason = "clients are used directly, not as trait objects"
+)]
+pub trait HubLookup: HubOps {
     /// Retrieves a subscription by id.
-    ///
-    /// Rarely available: of the fourteen APIs this crate covers, only
-    /// **TMF621, TMF629, TMF639, TMF642 and TMF679** define `GET /hub/{id}`.
-    /// The other nine expose `POST /hub` and `DELETE /hub/{id}` and nothing
-    /// else, so expect a `405` from them.
-    ///
-    /// None of the fourteen lets you *list* subscriptions at all — there is no
-    /// `GET /hub`. Keep the id you were given at registration; it is the only
-    /// handle on the subscription you will get.
-    ///
-    /// Which APIs those are is not a remembered fact:
-    /// `the_hub_surface_is_what_the_specifications_declare` in
-    /// `tests/coverage.rs` reads it back out of the vendored documents.
     async fn get_listener(&self, id: &str) -> Result<Hub> {
         self.hub_client().get(HUB, id, &Query::new()).await
     }

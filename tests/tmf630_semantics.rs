@@ -191,7 +191,7 @@ async fn an_asynchronous_write_is_reported_as_accepted() {
             &rutmf::product::ProductOfferingCreate::builder()
                 .name("Business Internet")
                 .lifecycle_status("Active")
-                .last_update(chrono::Utc::now())
+                .last_update(rutmf::core::Timestamp::now())
                 .build(),
         )
         .await

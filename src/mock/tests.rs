@@ -61,12 +61,12 @@ fn a_hub_query_is_read_as_the_tmf630_filter_it_is() {
 fn clearing_empties_the_store_and_the_notifications() {
     let server = server_with_hubs();
     server.emit(&json!({"eventType": "AnyEvent"}));
-    assert!(!server.notifications().is_empty());
+    assert_ne!(server.notifications().len(), 0);
 
     server.clear();
 
-    assert!(server.notifications().is_empty());
-    assert!(server.collection("hub").is_empty());
+    assert_eq!(server.notifications(), Vec::<Notification>::new());
+    assert_eq!(server.collection("hub"), Vec::<Value>::new());
 }
 
 /// Writes through the API notify on their own.
@@ -206,7 +206,7 @@ async fn nothing_is_delivered_when_nobody_subscribed() {
 
     server.transport().execute(create).await.expect("created");
 
-    assert!(server.notifications().is_empty());
+    assert_eq!(server.notifications(), Vec::<Notification>::new());
 }
 
 #[tokio::test]
@@ -283,4 +283,42 @@ async fn expect_error_agrees_with_the_client_on_the_same_response() {
         Some("40401"),
         "the handler's TMF630 body must survive as data"
     );
+}
+
+/// The unscoped mock serves any collection with every operation, which is what
+/// lets one mock stand in for several APIs in a client test.
+#[tokio::test]
+async fn an_unscoped_mock_accepts_any_operation() {
+    let server = MockTmfServer::new();
+    let mut create = TmfRequest::new(Method::POST, server.url_for("customerBill"));
+    create.headers.insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/json"),
+    );
+    create.body = Some(bytes::Bytes::from_static(br#"{"@type":"CustomerBill"}"#));
+    let response = server.transport().execute(create).await.expect("answered");
+    assert_eq!(response.status, StatusCode::CREATED);
+}
+
+/// A mock scoped to one API refuses what that API does not declare, exactly as
+/// a server for it would.
+///
+/// declared-operations/SR-006: the only way to an open surface is the unscoped
+/// mock above; `TmfHandler` has no public constructor without an `Api`.
+#[cfg(feature = "api-tmf678")]
+#[tokio::test]
+async fn a_mock_scoped_to_tmf678_refuses_creating_a_bill() {
+    let server = MockTmfServer::for_api(&crate::api::tmf678::API);
+    let mut create = TmfRequest::new(Method::POST, server.url_for("customerBill"));
+    create.body = Some(bytes::Bytes::from_static(b"{}"));
+    let response = server.transport().execute(create).await.expect("answered");
+    assert_eq!(response.status, StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(
+        response
+            .headers
+            .get(http::header::ALLOW)
+            .map(|v| v.to_str().unwrap()),
+        Some("GET")
+    );
+    assert_eq!(server.collection("customerBill"), Vec::<Value>::new());
 }

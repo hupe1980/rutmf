@@ -21,56 +21,82 @@ macro_rules! ref_target {
 
 ref_target!(
     /// A sales channel through which an offering is available.
-    Channel, "Channel", "ChannelRef"
+    Channel,
+    "Channel",
+    "ChannelRef"
 );
 ref_target!(
     /// A geographic place — TMF673 / TMF674.
-    Place, "Place", "PlaceRef"
+    Place,
+    "Place",
+    "PlaceRef"
 );
 ref_target!(
     /// A geographic address — TMF673.
-    GeographicAddress, "GeographicAddress", "GeographicAddressRef"
+    GeographicAddress,
+    "GeographicAddress",
+    "GeographicAddressRef"
 );
 ref_target!(
     /// A market segment targeted by an offering.
-    MarketSegment, "MarketSegment", "MarketSegmentRef"
+    MarketSegment,
+    "MarketSegment",
+    "MarketSegmentRef"
 );
 ref_target!(
     /// A policy constraining an entity.
-    Policy, "Policy", "PolicyRef"
+    Policy,
+    "Policy",
+    "PolicyRef"
 );
 ref_target!(
     /// A service level agreement — TMF623.
-    ServiceLevelAgreement, "ServiceLevelAgreement", "SLARef"
+    ServiceLevelAgreement,
+    "ServiceLevelAgreement",
+    "SLARef"
 );
 ref_target!(
     /// An agreement — TMF651.
-    Agreement, "Agreement", "AgreementRef"
+    Agreement,
+    "Agreement",
+    "AgreementRef"
 );
 ref_target!(
     /// A payment method — TMF670.
-    PaymentMethod, "PaymentMethod", "PaymentMethodRef"
+    PaymentMethod,
+    "PaymentMethod",
+    "PaymentMethodRef"
 );
 ref_target!(
     /// A service candidate in a service catalog — TMF633.
-    ServiceCandidate, "ServiceCandidate", "ServiceCandidateRef"
+    ServiceCandidate,
+    "ServiceCandidate",
+    "ServiceCandidateRef"
 );
 ref_target!(
     /// A service specification — TMF633.
-    ServiceSpecification, "ServiceSpecification", "ServiceSpecificationRef"
+    ServiceSpecification,
+    "ServiceSpecification",
+    "ServiceSpecificationRef"
 );
 ref_target!(
     /// An intent specification — TMF921.
-    IntentSpecification, "IntentSpecification", "IntentSpecificationRef"
+    IntentSpecification,
+    "IntentSpecification",
+    "IntentSpecificationRef"
 );
 ref_target!(
     /// A connection point of a resource function — TMF634 references it, and
     /// no vendored specification defines the entity itself.
-    ConnectionPointSpecification, "ConnectionPointSpecification", "ConnectionPointSpecificationRef"
+    ConnectionPointSpecification,
+    "ConnectionPointSpecification",
+    "ConnectionPointSpecificationRef"
 );
 ref_target!(
     /// An endpoint joined by a connection specification — TMF634.
-    EndpointSpecification, "EndpointSpecification", "EndpointSpecificationRef"
+    EndpointSpecification,
+    "EndpointSpecification",
+    "EndpointSpecificationRef"
 );
 ref_target!(
     /// A connection point of a resource function: the service access point
@@ -80,20 +106,28 @@ ref_target!(
     /// references it from `ResourceFunction.connectionPoint` and from an
     /// [`Endpoint`](crate::resource::Endpoint), and no vendored specification
     /// defines the entity itself.
-    ConnectionPoint, "ConnectionPoint", "ConnectionPointRef"
+    ConnectionPoint,
+    "ConnectionPoint",
+    "ConnectionPointRef"
 );
 ref_target!(
     /// A schedule a resource function runs to — TMF645.
-    Schedule, "Schedule", "ScheduleRef"
+    Schedule,
+    "Schedule",
+    "ScheduleRef"
 );
 ref_target!(
     /// Whatever an alarm is raised against — TMF642 leaves the class open, so
     /// the reference carries `@referredType` rather than a fixed target.
-    AlarmedObject, "AlarmedObject", "AlarmedObjectRef"
+    AlarmedObject,
+    "AlarmedObject",
+    "AlarmedObjectRef"
 );
 ref_target!(
     /// A performance threshold whose crossing raised an alarm — TMF628.
-    Threshold, "Threshold", "ThresholdRef"
+    Threshold,
+    "Threshold",
+    "ThresholdRef"
 );
 ref_target!(
     /// A billing account, as *referenced* — TMF678 uses `BillingAccountRef`,
@@ -102,35 +136,49 @@ ref_target!(
     /// The entity itself is [`account::Account`](crate::account::Account) with
     /// `AccountKind::Billing`; this marker exists because a `Ref<T>` binds one
     /// target type to one `…Ref` class name, and the subclasses have their own.
-    BillingAccount, "BillingAccount", "BillingAccountRef"
+    BillingAccount,
+    "BillingAccount",
+    "BillingAccountRef"
 );
 ref_target!(
     /// A financial account money is posted to, as *referenced* — TMF666
     /// declares `FinancialAccountRef` beside the entity.
     ///
     /// See [`BillingAccount`] for why a modelled entity still needs a marker.
-    FinancialAccount, "FinancialAccount", "FinancialAccountRef"
+    FinancialAccount,
+    "FinancialAccount",
+    "FinancialAccountRef"
 );
 ref_target!(
     /// The specification a billing cycle runs to — TMF678 references it and no
     /// vendored specification defines the entity.
-    BillCycleSpecification, "BillCycleSpecification", "BillCycleSpecificationRef"
+    BillCycleSpecification,
+    "BillCycleSpecification",
+    "BillCycleSpecificationRef"
 );
 ref_target!(
     /// A payment — TMF676.
-    Payment, "Payment", "PaymentRef"
+    Payment,
+    "Payment",
+    "PaymentRef"
 );
 ref_target!(
     /// A quote — TMF648.
-    Quote, "Quote", "QuoteRef"
+    Quote,
+    "Quote",
+    "QuoteRef"
 );
 ref_target!(
     /// An appointment — TMF646.
-    Appointment, "Appointment", "AppointmentRef"
+    Appointment,
+    "Appointment",
+    "AppointmentRef"
 );
 ref_target!(
     /// A policy or rule constraining an entity — TMF632.
-    Constraint, "Constraint", "ConstraintRef"
+    Constraint,
+    "Constraint",
+    "ConstraintRef"
 );
 ref_target!(
     /// An entity of unspecified kind.
@@ -138,31 +186,45 @@ ref_target!(
     /// The v5 `EntityRef`, used where a schema declines to say what it points
     /// at: TMF638's `relatedEntity` is *some* TM Forum entity, and an event's
     /// `source` is *some* system. In both, `referred_type` names which.
-    AnyEntity, "Entity", "EntityRef"
+    AnyEntity,
+    "Entity",
+    "EntityRef"
 );
 ref_target!(
     /// An intent — TMF921.
-    Intent, "Intent", "IntentRef"
+    Intent,
+    "Intent",
+    "IntentRef"
 );
 ref_target!(
     /// A specification for an agreement — TMF651.
-    AgreementSpecification, "AgreementSpecification", "AgreementSpecificationRef"
+    AgreementSpecification,
+    "AgreementSpecification",
+    "AgreementSpecificationRef"
 );
 ref_target!(
     /// A set of permissions granted to a party role — TMF672.
-    PermissionSpecificationSet, "PermissionSpecificationSet", "PermissionSpecificationSetRef"
+    PermissionSpecificationSet,
+    "PermissionSpecificationSet",
+    "PermissionSpecificationSetRef"
 );
 ref_target!(
     /// The specification of an association between two entity specifications.
-    AssociationSpecification, "AssociationSpecification", "AssociationSpecificationRef"
+    AssociationSpecification,
+    "AssociationSpecification",
+    "AssociationSpecificationRef"
 );
 ref_target!(
     /// An account — TMF666. The base class a bare `AccountRef` names.
-    Account, "Account", "AccountRef"
+    Account,
+    "Account",
+    "AccountRef"
 );
 ref_target!(
     /// A promotion applied to an offering — TMF671.
-    Promotion, "Promotion", "PromotionRef"
+    Promotion,
+    "Promotion",
+    "PromotionRef"
 );
 ref_target!(
     /// A product offering qualification — TMF679.
@@ -172,5 +234,21 @@ ref_target!(
     /// that name: it serves `CheckProductOfferingQualification` and
     /// `QueryProductOfferingQualification`, and a bare reference does not say
     /// which. Pointing it at either would guess.
-    ProductOfferingQualification, "ProductOfferingQualification", "ProductOfferingQualificationRef"
+    ProductOfferingQualification,
+    "ProductOfferingQualification",
+    "ProductOfferingQualificationRef"
+);
+ref_target!(
+    /// The specification a product usage record conforms to — TMF635 references
+    /// it, and no API this crate covers defines the entity.
+    ProductUsageSpecification,
+    "ProductUsageSpecification",
+    "ProductUsageSpecificationRef"
+);
+ref_target!(
+    /// A service-level usage record that produced a product usage — TMF635
+    /// references it, and no API this crate covers defines the entity.
+    ServiceUsage,
+    "ServiceUsage",
+    "ServiceUsageRef"
 );

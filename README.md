@@ -46,6 +46,7 @@ Flattening the three into one all-optional struct leaves every mistake to be
 caught by the server at runtime. Keeping them apart makes it a compile error:
 
 ```rust
+use rutmf::core::Timestamp;
 use rutmf::product::ProductOfferingCreate;
 
 // `name`, `lifecycle_status` and `last_update` are required on create.
@@ -53,7 +54,7 @@ use rutmf::product::ProductOfferingCreate;
 let body = ProductOfferingCreate::builder()
     .name("Business Internet")
     .lifecycle_status("Active")
-    .last_update(chrono::Utc::now())
+    .last_update(Timestamp::now())
     .build();
 ```
 
@@ -225,7 +226,7 @@ MSRV is **1.88**, verified in CI. The domain model builds for
 
 ## 🗺️ Coverage
 
-Fourteen APIs are implemented end to end — domain types, client, mock, conformance
+Fifteen APIs are implemented end to end — domain types, client, mock, conformance
 fixtures and schema coverage:
 
 | API | Version | Resources |
@@ -238,6 +239,7 @@ fixtures and schema coverage:
 | **TMF669** Party Role Management | v5.0.0 | `PartyRole` (supplier / consumer / producer / business partner), `PartyRoleSpecification` |
 | **TMF642** Alarm Management | v5.0.1 | `Alarm` + six task collections (ack, clear, comment, group, …) |
 | **TMF666** Account Management | v5.0.0 | `Account` (billing / financial / party / settlement), `BillFormat`, `BillPresentationMedia`, `BillingCycleSpecification` |
+| **TMF635** Product Usage Management | v5.0.0 | `ProductUsage` (rated usage, prices on the record), `ExportJob` |
 | **TMF678** Customer Bill | v5.0.0 | `CustomerBill`, `CustomerBillOnDemand`, `AppliedCustomerBillingRate`, `BillCycle` |
 | **TMF634** Resource Catalog Management | v5.0.0 | `ResourceCatalog`, `ResourceCategory`, `ResourceCandidate`, `ResourceSpecification`, `ImportJob`, `ExportJob` |
 | **TMF637** Product Inventory Management | v5.0.0 | `Product` |
@@ -254,7 +256,10 @@ network reports when any of it breaks.
 
 Every CRUD resource carries the read / `Create` / `Update` triple and is
 member-complete against its v5 schema. Every client implements `HubOps` for
-event subscriptions.
+event subscriptions, and the six whose API lets you read a subscription back
+also implement `HubLookup`. Each `rutmf::api::tmfXXX` module publishes its
+declared surface as `API` — every collection and the operations on it, held
+equal to the specification document by the test suite.
 
 ℹ️ **TMF641 Service Ordering and TMF688 Event Management are deliberately absent**:
 neither has a v5 release, and this crate models v5 rather than pretending
@@ -265,7 +270,7 @@ otherwise.
 The other direction: you have the data, and you need to expose it as a conformant
 TM Forum API. Implement five methods — none of them about HTTP — and `TmfHandler`
 supplies TMF630 routing, filtering, sorting, `fields=` projection, paging with
-count headers — offset/limit *and* the cursor pagination TMF621 and TMF639
+count headers — offset/limit *and* the cursor pagination TMF621, TMF635 and TMF639
 declare — all four `PATCH` content types, `ETag` with `If-Match` on writes and
 `If-None-Match` on reads, error bodies and status codes. Add
 `.with_max_page_size(100)` and an unbounded collection `GET` stops being
@@ -281,11 +286,20 @@ impl ResourceStore for Catalog {
     // get, create, replace, delete — and that is the whole trait.
 }
 
+let handler = TmfHandler::for_host(&tmf620::API, "https://mycsp.com", catalog);
 let app = axum::Router::new().nest(
-    "/tmf-api/productCatalogManagement/v5",
-    rutmf::server::router(TmfHandler::new(base_url, catalog)),
+    &format!("/{}", tmf620::API.path),
+    rutmf::server::router(handler),
 );
 ```
+
+**It serves exactly what the specification declares.** The handler is built for
+one API, and a method that API does not declare on a path is answered `405` with
+an `Allow` header before the store hears of it — a TMF678 server refuses
+`POST /customerBill` and `DELETE /customerBill/{id}` because TMF678 declares
+neither, with no guard in your store. A collection the API does not declare is a
+`404`. An API this crate does not cover is served the same way from an `Api` you
+declare yourself.
 
 It serves `/hub` and **raises the notifications** a conformant server owes: a
 write through the API becomes the right `{Resource}{Kind}Event`, matched against
@@ -294,13 +308,13 @@ each subscription's filter and addressed to its `/listener/{eventName}` URL. The
 blocking `POST`, a queue publish or a retry loop.
 
 Getting the *right* event name is not the one-liner it looks like. TMF621 and
-TMF634 raise `…StatusChangeEvent` where the other twelve raise
+TMF634 raise `…StatusChangeEvent` where the other thirteen raise
 `…StateChangeEvent` — and TMF634 does so over a member it still spells
 `lifecycleStatus`, so the difference cannot be read off the resource. TMF638
 separates an operational move (`serviceOperatingStatusChangeEvent`) from an
 administrative one. A server that guesses raises names nobody has subscribed to,
 and the failure is silent at both ends. So the spelling is read out of the
-vendored `/listener/…` paths, and `tests/coverage.rs` fails if all **157** of
+specifications’ `/listener/…` paths, and `tests/coverage.rs` fails if all **160** of
 them are not reproducible from the collection and the kind.
 
 `MockTmfServer` *is* `TmfHandler<MemoryStore>` with a `Notifier` that records
@@ -313,7 +327,7 @@ and cannot drift.
 
 Three suites, because each is blind where the others see.
 
-**Against the examples.** `tests/fixtures/` holds **591 `components.examples`
+**Against the examples.** `tests/fixtures/` holds **610 `components.examples`
 values** vendored verbatim from the TM Forum [specification repositories][tmf-repos]
 (Apache-2.0). Every one must parse and round-trip, and a separate test fails if
 any fixture falls outside the mapping, so a new one cannot be a silently untested
@@ -321,26 +335,26 @@ one.
 
 **Against the schemas.** Round-tripping proves nothing about coverage: an unknown
 member survives in `extensions` whether or not the model understands it. So this
-suite reads the vendored OpenAPI documents and checks **215 Rust types against
-462 v5 schemas** — member presence in both directions, member types, enumeration
+suite reads the pinned OpenAPI documents and checks **219 Rust types against
+490 v5 schemas** — member presence in both directions, member types, enumeration
 values, requiredness, discriminator values against each schema's own
 `discriminator.mapping`, that every reference names the class the spec declares,
 that a member with a closed vocabulary is an `enum` rather than a `String`, that
-a `date-time` member is a `Timestamp`, and that the fourteen specifications do not
+a `date-time` member is a `Timestamp`, and that the fifteen specifications do not
 disagree about a shared type.
 
 **Against the schemas, in reverse.** "Every Rust type maps to a schema" is
 satisfied by a crate modelling three schemas out of three thousand, so the suite
-also asks the opposite: **every schema the fourteen documents declare must be
+also asks the opposite: **every schema the fifteen documents declare must be
 modelled, or named in `NOT_MODELLED` with the reason.** Nothing may be merely
 absent. What that leaves out is the value arms of `PlaceRefOrValue`
 (TMF673/674/675 geography and its GeoJSON geometry) and `IntentRefOrValue`
-(TMF921) — APIs outside the fourteen, where the crate models the *reference* arm
+(TMF921) — APIs outside the fifteen, where the crate models the *reference* arm
 and a value arm round-trips through `extensions`.
 
 **Against a running server.** The other two check documents. This one reads each
-vendored specification, discovers the collections and methods it declares, and
-drives the server layer over a real socket for **all 43** — asserting the status
+pinned specification, discovers the collections and methods it declares, and
+drives the server layer over a real socket for **all 44** — asserting the status
 codes, the count headers, the `ETag`, and that a missing resource is a `404`
 with a TMF630 body. It is spec-driven, so a new API extends it with no new test
 code.
@@ -396,8 +410,8 @@ else, and a settled decision on the `#[non_exhaustive]` trade-off. See
 ## 🙏 Credit
 
 The specifications themselves are published by [TM Forum][tmf] under Apache-2.0,
-and the vendored documents and examples under `specs/` and `tests/fixtures/` are
-their work.
+and the OpenAPI documents the test suites read and the examples vendored under
+`tests/fixtures/` are their work.
 
 [tmf]: https://www.tmforum.org/oda/open-apis/
 
@@ -413,8 +427,8 @@ Dual-licensed under either of
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
 - MIT license ([LICENSE-MIT](LICENSE-MIT))
 
-at your option. Vendored TM Forum specification material under `specs/` and
-`tests/fixtures/` remains under its original Apache-2.0 license and copyright.
+at your option. Vendored TM Forum specification material under `tests/fixtures/`
+remains under its original Apache-2.0 license and copyright.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this crate, as defined in the Apache-2.0 license, shall be

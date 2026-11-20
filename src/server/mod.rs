@@ -21,14 +21,22 @@
 //! about *storage*, none about HTTP — and [`TmfHandler`] supplies TMF630.
 //!
 //! ```
+//! # #[cfg(feature = "api-tmf620")] {
+//! use rutmf::api::tmf620;
 //! use rutmf::server::{MemoryStore, TmfHandler};
 //!
-//! let handler = TmfHandler::new(
-//!     "https://mycsp.com/tmf-api/productCatalogManagement/v5",
-//!     MemoryStore::new(),
-//! );
+//! let handler = TmfHandler::for_host(&tmf620::API, "https://mycsp.com", MemoryStore::new());
 //! # let _ = handler;
+//! # }
 //! ```
+//!
+//! The handler is built for one API and serves what its specification
+//! declares — nothing more. TMF678 declares no `POST /customerBill`, so a
+//! TMF678 server answers one with `405` and `Allow: GET` before the store hears
+//! of it; a collection TMF678 does not declare is a `404`. Each
+//! `rutmf::api::tmfXXX` module publishes its API as `API`, held equal to the
+//! specification document by the crate's tests, and an API this crate does not
+//! cover is declared the same way with [`Api::new`](crate::api::Api::new).
 //!
 //! Nothing in [`ResourceStore`] can get the wire format wrong, because nothing
 //! in it is about the wire. That is the whole design.
@@ -65,7 +73,7 @@
 //! [`MockTmfServer`](crate::mock::MockTmfServer) is a third adapter: the same
 //! handler wired straight into the client's [`Transport`], with no socket at
 //! all. The mock and a real server therefore run *the same semantics code* —
-//! the 591-fixture conformance corpus exercises one and vouches for both.
+//! the 610-fixture conformance corpus exercises one and vouches for both.
 //!
 //! # Notifications
 //!

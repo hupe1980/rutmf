@@ -96,6 +96,7 @@ const APIS: &[(&str, &str, usize)] = &[
     ("tmf629", "5.0.1", 16),
     ("tmf632", "5.0.0", 32),
     ("tmf634", "5.0.0", 82),
+    ("tmf635", "5.0.0", 19),
     ("tmf642", "5.0.1", 42),
     ("tmf666", "5.0.0", 104),
     ("tmf669", "5.0.0", 34),
@@ -170,7 +171,7 @@ const KNOWN_BAD: &[(&str, &str)] = &[
 ///
 /// Quoted in `README.md` and the crate documentation; asserted by
 /// [`fixture_corpora_are_present_and_documented`].
-const TOTAL_FIXTURES: usize = 591;
+const TOTAL_FIXTURES: usize = 610;
 
 /// Which of a resource's three shapes a fixture is an example of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -220,7 +221,8 @@ fn shape_of(file: &str, value: &Value) -> Option<Shape> {
         if name.contains("create") {
             return Some(Shape::Create);
         }
-        if name.contains("update") {
+        // TMF635 names its patch bodies `Updating_a_product_usage_…`.
+        if name.contains("update") || name.contains("updating") {
             return Some(Shape::Update);
         }
         return None;
@@ -307,6 +309,8 @@ fn resource_of(api: &str, file: &str) -> Option<&'static str> {
             "qpoq",
             "qpoc",
         ],
+        // `productusage` before nothing it could shadow; `exportjob` is TMF635's own.
+        "tmf635" => &["productusage", "exportjob"],
         "tmf637" => &["product"],
         // TMF638 names four of its examples `Create_request.json`,
         // `Delete_request.json` and so on, with the resource left implicit.
@@ -397,6 +401,22 @@ fn check_fixture(api: &str, file: &str, value: &Value) {
         ("tmf620" | "tmf634", "importjob") => {
             dispatch!(shape, &label, value, ImportJob, ImportJobCreate);
         }
+        ("tmf635", "productusage") => dispatch!(
+            shape,
+            &label,
+            value,
+            rutmf::usage::ProductUsage,
+            rutmf::usage::ProductUsageCreate,
+            rutmf::usage::ProductUsageUpdate
+        ),
+        // TMF635's `ExportJob_FVO` is its own schema; the job read back is shared.
+        ("tmf635", "exportjob") => dispatch!(
+            shape,
+            &label,
+            value,
+            ExportJob,
+            rutmf::usage::ProductUsageExportJobCreate
+        ),
         ("tmf620" | "tmf634", "exportjob") => {
             dispatch!(shape, &label, value, ExportJob, ExportJobCreate);
         }
@@ -672,17 +692,17 @@ fn assert_round_trips<T: DeserializeOwned + Serialize>(label: &str, value: &Valu
     );
 }
 
-/// Rewrites every RFC 3339 timestamp to the lexical form `chrono` emits.
+/// Rewrites every RFC 3339 timestamp to the lexical form `Timestamp` emits.
 ///
-/// `chrono` writes fractional seconds in SI groups — none, milli, micro or
-/// nano — so an input of `12:15:59.96747` (five digits) comes back as
-/// `12:15:59.967470`. Same instant, different spelling, and the only difference
-/// this crate's round trip permits. The *offset* is preserved exactly; see
+/// Fractional seconds are written in their shortest form, so `12:15:59.000Z`
+/// comes back as `12:15:59Z` and `.500` as `.5`. Same instant, different
+/// spelling, and the only difference this crate's round trip permits. The
+/// *offset* is preserved exactly — `Z` stays `Z`, `+00:00` stays `+00:00`; see
 /// [`rutmf::core::Timestamp`].
 fn canonicalise(value: &Value) -> Value {
     match value {
         Value::String(raw) => match raw.parse::<rutmf::core::Timestamp>() {
-            Ok(t) => Value::String(t.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)),
+            Ok(t) => Value::String(t.to_string()),
             Err(_) => value.clone(),
         },
         Value::Array(items) => Value::Array(items.iter().map(canonicalise).collect()),
@@ -889,13 +909,14 @@ fn timestamps_keep_their_offset() {
     feature = "api-tmf639",
     feature = "api-tmf642",
     feature = "api-tmf666",
-    feature = "api-tmf678"
+    feature = "api-tmf678",
+    feature = "api-tmf635"
 ))]
 #[test]
 fn every_client_reports_the_version_it_was_modelled_from() {
     use rutmf::api::{
-        tmf620, tmf621, tmf622, tmf629, tmf632, tmf634, tmf637, tmf638, tmf639, tmf642, tmf666,
-        tmf669, tmf678, tmf679,
+        tmf620, tmf621, tmf622, tmf629, tmf632, tmf634, tmf635, tmf637, tmf638, tmf639, tmf642,
+        tmf666, tmf669, tmf678, tmf679,
     };
 
     let declared = [
@@ -905,6 +926,7 @@ fn every_client_reports_the_version_it_was_modelled_from() {
         ("tmf629", tmf629::SPEC_VERSION),
         ("tmf632", tmf632::SPEC_VERSION),
         ("tmf634", tmf634::SPEC_VERSION),
+        ("tmf635", tmf635::SPEC_VERSION),
         ("tmf637", tmf637::SPEC_VERSION),
         ("tmf638", tmf638::SPEC_VERSION),
         ("tmf639", tmf639::SPEC_VERSION),

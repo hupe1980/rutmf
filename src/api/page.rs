@@ -17,7 +17,7 @@ use super::query::Query;
 ///
 /// - `X-Total-Count` — how many resources match overall. The v5 documents
 ///   declare this (and `X-Result-Count`) on every collection response; they are
-///   the only two response headers the fourteen vendored specifications declare
+///   the only two response headers the fifteen vendored specifications declare
 ///   at all.
 /// - `206 Partial Content` — TMF630's own signal that the response is a slice
 ///   of a larger match. A server may omit the counters (computing a total can be

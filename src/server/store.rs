@@ -33,7 +33,7 @@ pub struct Selection {
     pub limit: Option<usize>,
     /// An opaque cursor: start immediately after the resource it names.
     ///
-    /// TMF621 and TMF639 declare `after`/`before` on three collections. The
+    /// TMF621, TMF635 and TMF639 declare `after`/`before` on five collections. The
     /// cursor is opaque *to the client*; a store chooses what it means. The
     /// in-memory implementation reads it as a resource `id`, which is stable
     /// under the sort the same selection applies.
@@ -606,24 +606,20 @@ mod cursor_tests {
         // Paging from the start instead would hand a client that sent a stale
         // cursor page one again — and a loop that pages until nothing new
         // arrives would never terminate.
-        assert!(
-            select(&[("after", "nope")])
-                .apply(resources())
-                .items
-                .is_empty()
+        assert_eq!(
+            select(&[("after", "nope")]).apply(resources()).items,
+            Vec::<Value>::new()
         );
-        assert!(
-            select(&[("before", "nope")])
-                .apply(resources())
-                .items
-                .is_empty()
+        assert_eq!(
+            select(&[("before", "nope")]).apply(resources()).items,
+            Vec::<Value>::new()
         );
     }
 
     #[test]
     fn a_cursor_is_not_mistaken_for_an_attribute_filter() {
         // Treated as a filter, `after` would match a member named `after` —
-        // that is, nothing at all, for every cursor request TMF621 and TMF639
+        // that is, nothing at all, for every cursor request TMF621, TMF635 and TMF639
         // define.
         let selection = select(&[("after", "2"), ("before", "5"), ("filter", "$[*]")]);
         assert!(selection.filters.is_empty());

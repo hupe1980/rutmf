@@ -24,6 +24,7 @@ use super::patch::Patch;
 use super::query::Query;
 use super::resource_ops;
 use super::transport::Transport;
+use super::{Api, Collection, Operation};
 
 /// The conventional API root, appended to a host to form the base URL.
 pub const API_PATH: &str = "tmf-api/accountManagement/v5";
@@ -34,6 +35,27 @@ pub const API_PATH: &str = "tmf-api/accountManagement/v5";
 /// rather than a single crate-wide constant. Asserted against the vendored
 /// corpus by `every_client_reports_the_version_it_was_modelled_from`.
 pub const SPEC_VERSION: &str = "5.0.0";
+
+/// What TMF666 declares: every collection, including `hub`, with the
+/// operations on each.
+///
+/// [`TmfHandler`](crate::server::TmfHandler) refuses anything else, and
+/// `tests/coverage.rs` holds this equal to the specification document.
+pub const API: Api = Api::new(
+    "TMF666",
+    API_PATH,
+    SPEC_VERSION,
+    &[
+        Collection::crud("billFormat"),
+        Collection::crud("billPresentationMedia"),
+        Collection::crud("billingAccount"),
+        Collection::crud("billingCycleSpecification"),
+        Collection::crud("financialAccount"),
+        Collection::crud("partyAccount"),
+        Collection::crud("settlementAccount"),
+        Collection::new("hub", &[Operation::Create, Operation::Delete]),
+    ],
+);
 
 const BILLING: &str = "billingAccount";
 const FINANCIAL: &str = "financialAccount";

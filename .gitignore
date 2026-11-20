@@ -22,3 +22,24 @@ target
 
 # Custom
 .DS_Store
+
+# Internal architecture notes (see concepts/README.md), anchored to the repository
+# root.
+#
+# The third-party corpus — the TM Forum OpenAPI documents the coverage and
+# server-conformance suites read — lives at `concepts/reference/` and is covered by
+# this line. It is Apache-2.0 and public, so it is fetched rather than committed:
+# `scripts/references.sh` pins every document to an upstream commit and a SHA-256,
+# and `concepts/REFERENCES.md` is the index.
+/concepts/
+
+# This project's own feature specifications, and the Spec Kit machinery that produces
+# them: `specs/NNN-slug/` (spec, plan, research, tasks), `.specify/memory/constitution.md`,
+# and the `/speckit-*` skills. Same rule as `concepts/` — internal, and the published
+# tree may not cite a path its reader does not have; scripts/concepts-check.sh fails on
+# one that does. Matching billing, sepa and eebus.
+#
+# Until 2026-11-19 `specs/` held the OpenAPI documents now under `concepts/reference/oas/`.
+/specs/
+/.specify/
+/.claude/

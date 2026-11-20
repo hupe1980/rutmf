@@ -27,6 +27,10 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
       - uses: Swatinem/rust-cache@v2
+      # The coverage and server-conformance suites read the TM Forum OpenAPI
+      # documents, which are fetched — pinned by commit and SHA-256 — rather
+      # than committed.
+      - run: bash scripts/references.sh
       # `--all-features` is what runs the two suites that matter: the
       # conformance corpus and the schema-coverage gate.
       - run: cargo test --all-features --all-targets
@@ -64,6 +68,8 @@ jobs:
       - run: cargo check --no-default-features --features api-tmf642
       - run: cargo check --no-default-features --features bill
       - run: cargo check --no-default-features --features account
+      - run: cargo check --no-default-features --features usage
+      - run: cargo check --no-default-features --features api-tmf635
       - run: cargo check --no-default-features --features api-tmf666
       - run: cargo check --no-default-features --features api-tmf678
       - run: cargo check --no-default-features --features api-tmf637
@@ -108,7 +114,7 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --target wasm32-unknown-unknown --no-default-features --features party,customer,product,order,service,resource,ticket,alarm,bill,account
+      - run: cargo check --target wasm32-unknown-unknown --no-default-features --features party,customer,product,order,service,resource,ticket,alarm,bill,account,usage
 
   docs:
     name: docs
@@ -138,8 +144,8 @@ jobs:
       - name: The package carries no vendored corpus
         run: |
           set -euo pipefail
-          if cargo package --list --allow-dirty | grep -Eq '^(specs|tests)/'; then
-            echo "::error::specs/ or tests/ leaked into the package"
+          if cargo package --list --allow-dirty | grep -Eq '^(concepts|specs|tests)/'; then
+            echo "::error::concepts/, specs/ or tests/ leaked into the package"
             exit 1
           fi
 
@@ -151,43 +157,9 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
-      - name: Compare vendored OAS documents against upstream
-        run: |
-          set -uo pipefail
-          base=https://raw.githubusercontent.com/tmforum-apis
-          check() {
-            local repo="$1" file="$2"
-            # The vendored file is named exactly as upstream names it. If it is
-            # not, this job silently compares nothing — so a missing local file
-            # is an error rather than a warning.
-            if [ ! -f "specs/$file" ]; then
-              echo "::error::specs/$file does not exist; the vendored name must match upstream"
-              return 1
-            fi
-            curl -sSfL "$base/$repo/main/$file" -o upstream.yaml || {
-              echo "::warning::could not fetch $repo/$file — if this persists, the repository name here is wrong, not the network"
-              return 0; }
-            if diff -q "specs/$file" upstream.yaml >/dev/null; then
-              echo "$file is current"
-            else
-              echo "::warning::$file changed upstream — refresh specs/ and tests/fixtures/"
-              diff "specs/$file" upstream.yaml | head -30 || true
-            fi
-          }
-          check TMF620_ProductCatalog     TMF620-Product_Catalog_Management-v5.0.0.oas.yaml
-          check TMF621_TroubleTicket      TMF621-Trouble_Ticket-v5.0.1.oas.yaml
-          check TMF622_ProductOrder       TMF622-ProductOrdering-v5.0.0.oas.yaml
-          check TMF629_CustomerManagement TMF629-Customer_Management-v5.0.1.oas.yaml
-          check TMF632_PartyManagement    TMF632-Party_Management-v5.0.0.oas.yaml
-          check TMF634_ResourceCatalog    TMF634-Resource_Catalog_Management-v5.0.0.oas.yaml
-          check TMF642_AlarmManagement    TMF642_Alarm_v5.0.1.oas.yaml
-          check TMF666_AccountManagement  TMF666-Account_Management-v5.0.0.oas.yaml
-          check TMF678_CustomerBill       TMF678-CustomerBill-v5.0.0.oas.yaml
-          check TMF637_ProductInventory   TMF637-ProductInventory-v5.0.0.oas.yaml
-          check TMF638_ServiceInventory   TMF638-Service_Inventory_Management-v5.0.0.oas.yaml
-          check TMF639_ResourceInventory  TMF639-Resource_Inventory_Management-v5.0.0.oas.yaml
-          check TMF669_PartyRole          TMF669-Party_Role_Management-v5.0.0.oas.yaml
-          check TMF679_ProductOfferingQualification TMF679-Product_Offering_Qualification-v5.0.0.oas.yaml
+      # The pins in scripts/references.sh are compared against upstream `main`.
+      - name: Compare the pinned OAS documents against upstream
+        run: bash scripts/references.sh --drift
 
   supply-chain:
     name: cargo-deny

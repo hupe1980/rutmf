@@ -13,7 +13,7 @@ use super::macros::tmf_struct;
 use super::party::RelatedParty;
 use super::reference::Ref;
 use super::refs::AnyEntity;
-use super::value::Timestamp;
+use super::time::Timestamp;
 
 tmf_struct! {
     @name = "Event";
@@ -82,7 +82,7 @@ tmf_struct! {
 /// derived rather than tabulated and a subscription cannot be misspelled into
 /// silence.
 ///
-/// These are exactly the kinds the fourteen vendored specifications declare,
+/// These are exactly the kinds the fifteen vendored specifications declare,
 /// checked by `every_declared_listener_is_a_kind_this_crate_names` in
 /// `tests/coverage.rs`. Two belong to one API each:
 /// [`OperatingStatusChange`](Self::OperatingStatusChange) to TMF638 and
@@ -125,7 +125,7 @@ pub enum EventKind {
     StatusChange,
     /// A service's `operatingStatus` moved — TMF638.
     ///
-    /// TMF638's `Service` is the only resource of the fourteen carrying both an
+    /// TMF638's `Service` is the only resource of the fifteen carrying both an
     /// administrative `state` and an operational `operatingStatus`, with a
     /// listener for each.
     OperatingStatusChange,

@@ -52,11 +52,12 @@
 //!
 //! [`Extensions`]: rutmf::core::Extensions
 
-#![cfg(feature = "schemars")]
+#![cfg(all(feature = "schemars", feature = "full"))]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use rutmf::api::{Api, Operation};
 use rutmf::core::{EventKind, ValueKind};
 use rutmf::server::{event_type_for, state_change_kind};
 use serde_norway::Value as Yaml;
@@ -75,6 +76,7 @@ const SPECS: &[(&str, &str)] = &[
         "TMF634",
         "TMF634-Resource_Catalog_Management-v5.0.0.oas.yaml",
     ),
+    ("TMF635", "TMF635-Product_Usage_Management-v5.0.0.oas.yaml"),
     ("TMF642", "TMF642_Alarm_v5.0.1.oas.yaml"),
     ("TMF666", "TMF666-Account_Management-v5.0.0.oas.yaml"),
     ("TMF669", "TMF669-Party_Role_Management-v5.0.0.oas.yaml"),
@@ -96,10 +98,20 @@ const SPECS: &[(&str, &str)] = &[
 
 // --- reading the OAS -------------------------------------------------------
 
+/// Where the `OpenAPI` documents live: `$RUTMF_REFERENCE/oas` when the variable
+/// is set, else the git-ignored reference directory of this checkout.
+/// `scripts/references.sh` fetches them there, pinned by commit and SHA-256.
+fn spec_dir() -> PathBuf {
+    std::env::var_os("RUTMF_REFERENCE")
+        .map_or_else(
+            || Path::new(env!("CARGO_MANIFEST_DIR")).join("concepts/reference"),
+            PathBuf::from,
+        )
+        .join("oas")
+}
+
 fn spec_path(file: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("specs")
-        .join(file)
+    spec_dir().join(file)
 }
 
 fn load_specs() -> BTreeMap<&'static str, Yaml> {
@@ -110,8 +122,9 @@ fn load_specs() -> BTreeMap<&'static str, Yaml> {
             let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| {
                 panic!(
                     "reading {}: {e}\n\
-                     The vendored specs are what this test checks against; \
-                     without them it would pass vacuously.",
+                     The specifications are what this test checks against; \
+                     without them it would pass vacuously. \
+                     Fetch them with `scripts/references.sh`.",
                     path.display()
                 )
             });
@@ -467,6 +480,7 @@ fn mapped_types() -> Vec<Mapped> {
     use rutmf::resource;
     use rutmf::service;
     use rutmf::ticket;
+    use rutmf::usage;
 
     mapping! {
         "TMF620" {
@@ -896,6 +910,41 @@ fn mapped_types() -> Vec<Mapped> {
                 "ContactMedium", "EmailContactMedium", "PhoneContactMedium",
                 "FaxContactMedium", "SocialContactMedium", "GeographicAddressContactMedium",
             ] => party::ContactMedium,
+        }
+        "TMF635" {
+            // TMF635 declares no `ProductUsageRef`; a usage record is referenced
+            // by the generic `EntityRef`.
+            "ProductUsage" => usage::ProductUsage,
+            "ProductUsage_FVO" => usage::ProductUsageCreate,
+            "ProductUsage_MVO" => usage::ProductUsageUpdate,
+            "ProductPrice" => product::ProductPrice,
+            "PriceAlteration" => product::PriceAlteration,
+            "Price" => core::Price,
+            "ExportJob" => product::ExportJob,
+            // Not TMF620's: TMF635 requires no `url` and accepts no status.
+            "ExportJob_FVO" => usage::ProductUsageExportJobCreate,
+            "ExternalIdentifier" => core::ExternalIdentifier,
+            ["RelatedPartyRefOrPartyRoleRef"] => core::RelatedParty,
+            "Hub" => rutmf::api::Hub,
+            "Hub_FVO" => rutmf::api::HubCreate,
+            "Event" => core::TmfEvent,
+            "Money" => core::Money,
+            "Error" => core::TmfError,
+            [
+                "Characteristic",
+                "StringCharacteristic",
+                "StringArrayCharacteristic",
+                "IntegerCharacteristic",
+                "IntegerArrayCharacteristic",
+                "NumberCharacteristic",
+                "NumberArrayCharacteristic",
+                "BooleanCharacteristic",
+                "BooleanArrayCharacteristic",
+                "FloatCharacteristic",
+                "FloatArrayCharacteristic",
+                "ObjectCharacteristic",
+                "ObjectArrayCharacteristic",
+            ] => core::Characteristic,
         }
         "TMF678" {
             ["CustomerBill", "CustomerBillRef"] => bill::CustomerBill,
@@ -1462,6 +1511,7 @@ const ENUMS: &[(&str, &str, &str)] = &[
     ("TMF621", "TroubleTicketStatus", "TroubleTicketStatusType"),
     ("TMF642", "AlarmType", "AlarmType"),
     ("TMF642", "PerceivedSeverity", "PerceivedSeverity"),
+    ("TMF635", "ProductUsageStatus", "ProductUsageStatusType"),
     ("TMF678", "CustomerBillState", "CustomerBillStateType"),
     ("TMF678", "CustomerBillRunType", "CustomerBillRunType"),
     (
@@ -1760,10 +1810,10 @@ fn every_wire_only_member_is_justified_by_the_corpus() {
 ///
 /// Quoted in `README.md` and the site; asserted by
 /// [`the_mapping_covers_every_type_the_model_declares`].
-const MAPPED_TYPE_COUNT: usize = 215;
+const MAPPED_TYPE_COUNT: usize = 219;
 
 /// How many v5 schemas those types are checked against.
-const MAPPED_SCHEMA_COUNT: usize = 462;
+const MAPPED_SCHEMA_COUNT: usize = 490;
 
 /// Members this crate types although the schema does not declare them.
 ///
@@ -2281,11 +2331,40 @@ fn the_hub_surface_is_what_the_specifications_declare() {
         "an API grew GET /hub — subscriptions became listable, and `HubOps` \
          should offer it: {listable:?}"
     );
+    // `HubLookup::get_listener` is implemented by exactly the clients whose API
+    // declares `GET /hub/{id}`: a client must not offer a request its server
+    // has to refuse.
+    let lookup: BTreeSet<&str> = SPECS
+        .iter()
+        .map(|(api, _)| *api)
+        .filter(|api| {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/api")
+                .join(format!("{}.rs", api.to_ascii_lowercase()));
+            std::fs::read_to_string(path).is_ok_and(|source| source.contains("impl HubLookup for"))
+        })
+        .collect();
+    assert_eq!(
+        lookup, readable,
+        "the clients implementing `HubLookup` must be exactly the APIs that \
+         declare GET /hub/{{id}}"
+    );
+    let published: BTreeSet<&str> = SURFACES
+        .iter()
+        .filter(|api| {
+            api.collection("hub")
+                .is_some_and(|hub| hub.declares(Operation::Retrieve))
+        })
+        .map(|api| api.name)
+        .collect();
+    assert_eq!(
+        published, readable,
+        "`API` and the documents disagree about GET /hub/{{id}}"
+    );
     assert_eq!(
         readable,
-        BTreeSet::from(["TMF621", "TMF629", "TMF639", "TMF642", "TMF679"]),
-        "which APIs support `get_listener` changed; update the note on \
-         `HubOps::get_listener`"
+        BTreeSet::from(["TMF621", "TMF629", "TMF635", "TMF639", "TMF642", "TMF679"]),
+        "which APIs support `get_listener` changed; update the note on `HubLookup`"
     );
 }
 
@@ -2527,9 +2606,59 @@ fn the_documentation_lists_every_covered_api() {
     // And the count quoted in prose is the count of the list.
     assert_eq!(
         expected.len(),
-        14,
-        "the number of covered APIs changed; `fourteen` is written out in the \
+        15,
+        "the number of covered APIs changed; `fifteen` is written out in the \
          README, the landing page, the crate documentation and the guides"
+    );
+
+    // A previous count left behind in prose is the drift this cannot see by
+    // listing alone: "the fourteen" still reads fine after a fifteenth API.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut stale = Vec::new();
+    let mut prose: Vec<std::path::PathBuf> =
+        vec![root.join("README.md"), root.join("CONTRIBUTING.md")];
+    for dir in [
+        "site/content",
+        "site/content/docs",
+        "src",
+        "src/api",
+        "src/core",
+        "src/server",
+    ] {
+        for entry in std::fs::read_dir(root.join(dir))
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "md" || e == "rs") {
+                prose.push(path);
+            }
+        }
+    }
+    for path in prose {
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .to_lowercase();
+        for phrase in [
+            "the fourteen",
+            "fourteen apis",
+            "fourteen vendored",
+            "fourteen documents",
+            "of all fourteen",
+        ] {
+            if text.contains(phrase) {
+                stale.push(format!(
+                    "{}: \"{phrase}\"",
+                    path.strip_prefix(root).unwrap_or(&path).display()
+                ));
+            }
+        }
+    }
+    assert!(
+        stale.is_empty(),
+        "an old API count survives in prose:\n{}",
+        stale.join("\n")
     );
 }
 
@@ -2608,7 +2737,7 @@ fn every_declared_listener_is_a_kind_this_crate_names() {
          subscribe to or raise them — add the missing variant: {unnameable:#?}"
     );
     assert_eq!(
-        checked, 157,
+        checked, 160,
         "the number of listener endpoints changed; the count is quoted in \
          `EventKind`'s documentation"
     );
@@ -2742,6 +2871,143 @@ fn declared_operations(spec: &Yaml) -> BTreeMap<String, BTreeSet<String>> {
     declared
 }
 
+/// The surface every API module publishes, in the order of [`SPECS`].
+const SURFACES: &[&Api] = &[
+    &rutmf::api::tmf620::API,
+    &rutmf::api::tmf621::API,
+    &rutmf::api::tmf622::API,
+    &rutmf::api::tmf629::API,
+    &rutmf::api::tmf632::API,
+    &rutmf::api::tmf634::API,
+    &rutmf::api::tmf635::API,
+    &rutmf::api::tmf637::API,
+    &rutmf::api::tmf638::API,
+    &rutmf::api::tmf639::API,
+    &rutmf::api::tmf642::API,
+    &rutmf::api::tmf666::API,
+    &rutmf::api::tmf669::API,
+    &rutmf::api::tmf678::API,
+    &rutmf::api::tmf679::API,
+];
+
+/// The published surface of `api`, in the shape [`declared_operations`] reads
+/// out of a document.
+fn published_operations(api: &str) -> BTreeMap<String, BTreeSet<String>> {
+    let surface = SURFACES
+        .iter()
+        .find(|surface| surface.name == api)
+        .unwrap_or_else(|| panic!("{api} publishes no `API`"));
+    surface
+        .collections
+        .iter()
+        .map(|collection| {
+            let ops = collection
+                .operations
+                .iter()
+                .map(|op| match op {
+                    Operation::List => "GET_COLL",
+                    Operation::Create => "POST",
+                    Operation::Retrieve => "GET_ITEM",
+                    Operation::Update => "PATCH",
+                    Operation::Delete => "DELETE",
+                    _ => unreachable!("an operation TMF630 does not define"),
+                })
+                .map(str::to_owned)
+                .collect();
+            (collection.name.to_owned(), ops)
+        })
+        .collect()
+}
+
+/// Spells one declared operation as the path and method it is.
+fn describe(collection: &str, op: &str) -> String {
+    match op {
+        "GET_COLL" => format!("GET /{collection}"),
+        "POST" => format!("POST /{collection}"),
+        "GET_ITEM" => format!("GET /{collection}/{{id}}"),
+        other => format!("{other} /{collection}/{{id}}"),
+    }
+}
+
+/// Every API's published `API` is exactly what its specification declares.
+///
+/// The server refuses whatever `API` does not list, so an operation missing
+/// here is a declared operation the server answers `405` to, and an extra one
+/// is an undeclared write it lets through — `POST /customerBill` on a billing
+/// system. Both directions are checked, per collection and per operation.
+///
+/// declared-operations/SR-004
+#[test]
+fn every_published_surface_is_what_its_specification_declares() {
+    let specs = load_specs();
+    let mut failures = Vec::new();
+
+    let published: BTreeSet<&str> = SURFACES.iter().map(|s| s.name).collect();
+    let vendored: BTreeSet<&str> = SPECS.iter().map(|(api, _)| *api).collect();
+    assert_eq!(
+        published, vendored,
+        "every pinned specification needs a published `API`, and the reverse"
+    );
+
+    for surface in SURFACES {
+        let mut names = BTreeSet::new();
+        for collection in surface.collections {
+            if !names.insert(collection.name) {
+                failures.push(format!(
+                    "{}: `{}` is listed twice",
+                    surface.name, collection.name
+                ));
+            }
+            let unique: BTreeSet<_> = collection.operations.iter().collect();
+            if unique.len() != collection.operations.len() {
+                failures.push(format!(
+                    "{}: `{}` lists an operation twice",
+                    surface.name, collection.name
+                ));
+            }
+        }
+
+        let declared = declared_operations(&specs[surface.name]);
+        let have = published_operations(surface.name);
+        let collections: BTreeSet<&String> = declared.keys().chain(have.keys()).collect();
+        for collection in collections {
+            let empty = BTreeSet::new();
+            let want = declared.get(collection).unwrap_or(&empty);
+            let got = have.get(collection).unwrap_or(&empty);
+            for op in want.difference(got) {
+                failures.push(format!(
+                    "{}: the specification declares {} and `API` does not",
+                    surface.name,
+                    describe(collection, op)
+                ));
+            }
+            for op in got.difference(want) {
+                failures.push(format!(
+                    "{}: `API` declares {}, which the specification does not",
+                    surface.name,
+                    describe(collection, op)
+                ));
+            }
+        }
+        if surface.version
+            != specs[surface.name]["info"]["version"]
+                .as_str()
+                .unwrap_or_default()
+        {
+            failures.push(format!(
+                "{}: `API` says version {}, the specification {:?}",
+                surface.name, surface.version, specs[surface.name]["info"]["version"]
+            ));
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "a published `API` disagrees with its specification:\n{}",
+        failures.join("\n")
+    );
+}
+
 /// Which HTTP operations each macro in `api::ops` generates.
 const GENERATED: &[(&str, &[&str])] = &[
     ("op_list", &["GET_COLL"]),
@@ -2773,7 +3039,6 @@ const GENERATED: &[(&str, &[&str])] = &[
 /// exactly the mistake that would not be noticed.
 #[test]
 fn every_client_operation_is_declared_by_its_specification() {
-    let specs = load_specs();
     let mut failures = Vec::new();
 
     for (api, _) in SPECS {
@@ -2784,7 +3049,9 @@ fn every_client_operation_is_declared_by_its_specification() {
             continue; // an API modelled but not yet given a client
         };
         let constants = collection_constants(&source);
-        let declared = declared_operations(&specs[api]);
+        // Checked against the published `API`, which the test above holds equal
+        // to the document — so the clients and the server read one table.
+        let declared = published_operations(api);
 
         for (macro_name, ops) in GENERATED {
             let needle = format!("{macro_name}!(");
@@ -3192,11 +3459,12 @@ fn every_declared_query_parameter_can_be_expressed() {
         "which query parameters every API declares changed; `Query`'s \
          documentation says which are universal and which are not"
     );
+    let three: BTreeSet<&str> = BTreeSet::from(["TMF621", "TMF635", "TMF639"]);
     for restricted in ["sort", "filter", "after", "before"] {
         assert_eq!(
-            declared.get(restricted).map(BTreeSet::len),
-            Some(2),
-            "`{restricted}` is documented as declared by TMF621 and TMF639 alone"
+            declared.get(restricted),
+            Some(&three),
+            "which APIs declare `{restricted}` changed; `Query`'s documentation names them"
         );
     }
 }

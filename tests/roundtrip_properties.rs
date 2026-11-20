@@ -258,12 +258,12 @@ proptest! {
         length in 1i64..10_000,
         probe in -20_000i64..20_000,
     ) {
-        use chrono::{DateTime, TimeDelta, Utc};
+        use rutmf::core::Timestamp;
 
-        let epoch = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let start = epoch + TimeDelta::seconds(start_offset);
-        let end = start + TimeDelta::seconds(length);
-        let at = epoch + TimeDelta::seconds(probe);
+        let at_second = |s: i64| Timestamp::from(rutmf::jiff::Timestamp::from_second(s).unwrap());
+        let start = at_second(start_offset);
+        let end = at_second(start_offset + length);
+        let at = at_second(probe);
 
         let closed = TimePeriod::between(start, end);
         prop_assert_eq!(closed.contains(at), at >= start && at < end);
@@ -274,20 +274,39 @@ proptest! {
     }
 }
 
-/// `+00:00` and `Z` are the same offset; RFC 3339 prefers the latter, and so
-/// does `chrono`. It is the only re-spelling a timestamp undergoes.
+/// `+00:00` and `Z` name the same instant but say different things — RFC 9557
+/// reads `Z` as "UTC known, local offset unknown" — so each comes back as it
+/// was written.
 #[test]
-fn a_zero_offset_is_written_as_z() {
-    let parsed: ProductOffering = serde_json::from_value(json!({
-        "@type": "ProductOffering",
-        "lastUpdate": "2020-09-23T16:42:23+00:00",
-    }))
-    .unwrap();
+fn a_zero_offset_keeps_its_spelling() {
+    for spelling in ["2020-09-23T16:42:23+00:00", "2020-09-23T16:42:23Z"] {
+        let parsed: ProductOffering = serde_json::from_value(json!({
+            "@type": "ProductOffering",
+            "lastUpdate": spelling,
+        }))
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(&parsed).unwrap()["lastUpdate"],
+            json!(spelling)
+        );
+    }
+}
 
-    assert_eq!(
-        serde_json::to_value(&parsed).unwrap()["lastUpdate"],
-        json!("2020-09-23T16:42:23Z")
-    );
+proptest! {
+    /// jiff-time/SR-004: parsing any string answers with a timestamp or an
+    /// error — never a panic — and whatever parses writes back to a string
+    /// that parses to the same instant and offset.
+    #[test]
+    fn parsing_a_timestamp_is_total(raw in "\\PC{0,40}", shaped in "[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt ][0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,12})?(Z|z|[+-][0-9]{2}:[0-9]{2})") {
+        for input in [raw, shaped] {
+            if let Ok(t) = input.parse::<rutmf::core::Timestamp>() {
+                let back: rutmf::core::Timestamp = t.to_string().parse().unwrap();
+                prop_assert_eq!(back.instant(), t.instant());
+                prop_assert_eq!(back.offset(), t.offset());
+                prop_assert_eq!(back.is_zulu(), t.is_zulu());
+            }
+        }
+    }
 }
 
 /// A payload nesting extensions inside a modelled sub-object still round-trips.
@@ -306,4 +325,37 @@ fn extensions_nested_in_sub_objects_survive() {
 
     let parsed: ProductOffering = serde_json::from_value(original.clone()).unwrap();
     assert_eq!(serde_json::to_value(&parsed).unwrap(), original);
+}
+
+#[cfg(all(feature = "bill", feature = "usage"))]
+proptest! {
+    /// product-usage/SR-003: whatever a peer puts in a bill line's `productUsage`
+    /// characteristic, reading it never panics, and every reference it yields
+    /// has an id and names `ProductUsage` (or names nothing).
+    #[test]
+    fn reading_a_bill_lines_usage_is_total(value in arb_json(), entries in prop::collection::vec(arb_json(), 0..6)) {
+        for candidate in [value, Value::Array(entries)] {
+            let line: rutmf::bill::AppliedCustomerBillingRate = serde_json::from_value(json!({
+                "@type": "AppliedCustomerBillingRate",
+                "characteristic": [{"@type": "ObjectArrayCharacteristic", "name": "productUsage", "value": candidate}],
+            }))
+            .unwrap();
+            for usage in line.product_usages() {
+                prop_assert!(!usage.id.is_empty());
+                prop_assert!(usage.referred_type.as_deref().is_none_or(|t| t == "ProductUsage"));
+            }
+        }
+    }
+
+    /// Usage written by `with_product_usages` is read back exactly.
+    #[test]
+    fn bill_line_usage_round_trips(ids in prop::collection::vec("[A-Za-z0-9-]{1,12}", 0..8)) {
+        let line = rutmf::bill::AppliedCustomerBillingRate::builder()
+            .build()
+            .with_product_usages(ids.iter().map(Ref::new));
+        let json = serde_json::to_value(&line).unwrap();
+        let back: rutmf::bill::AppliedCustomerBillingRate = serde_json::from_value(json).unwrap();
+        let read: Vec<String> = back.product_usages().into_iter().map(|u| u.id).collect();
+        prop_assert_eq!(read, ids);
+    }
 }

@@ -6,6 +6,51 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-20
+
+### Breaking
+
+- **A server serves exactly what its specification declares.** `TmfHandler::new`
+  takes the API it serves — `TmfHandler::new(&tmf678::API, base_url, store)`. An
+  undeclared method is answered `405` with `Allow`, an undeclared collection
+  `404`, before the body is parsed or the store called. Previously every
+  collection accepted `POST` and every item `PATCH` and `DELETE`, so a TMF678
+  server let a client create and delete customer bills.
+- **`HubOps::get_listener` moved to `HubLookup`**, implemented only by the clients
+  whose API declares `GET /hub/{id}` (TMF621, TMF629, TMF635, TMF639, TMF642,
+  TMF679).
+- **`chrono` is replaced by `jiff`.** `chrono` is unmaintained
+  (RUSTSEC-2026-0543). `core::Timestamp` is now the crate's own type over `jiff`
+  1.0, re-exported as `rutmf::jiff`. It keeps the offset as written — `Z` stays
+  `Z` — and parses strict RFC 3339. Migrate `Utc::now()` to `Timestamp::now()`
+  and `t.to_utc()` to `t.instant()`; convert from `jiff` types with `.into()`.
+
+### Added
+
+- **TMF635 Product Usage Management v5.0.0**: the `usage` feature
+  (`ProductUsage`, `ProductUsageStatus`, create/update types,
+  `ProductUsageExportJobCreate`) and the `api-tmf635` client
+  `ProductUsageClient`. All 19 specification examples join the conformance
+  corpus (610 in all).
+- `AppliedCustomerBillingRate::product_usages` / `with_product_usages`: a bill
+  line names the usage records it charges for.
+- `rutmf::api::{Api, Collection, Operation}` and `API` in every `tmfXXX` module:
+  the declared surface, tested equal to the specification in both directions.
+- `TmfHandler::for_host`, `TmfHandler::api`, `TmfHandler::refusal`;
+  `MockTmfServer::for_api` for a mock scoped to one API.
+- The coverage page lists reference targets whose API has no v5 release.
+
+### Fixed
+
+- Every `405` carries the `Allow` header RFC 9110 requires.
+- `thiserror` is no longer a dependency of a build without the `api` feature.
+
+### Changed
+
+- Dependencies upgraded to their latest releases; MSRV stays 1.88.
+- The TM Forum OpenAPI documents are fetched by `scripts/references.sh`, pinned
+  by commit and SHA-256, instead of committed. Contributor tooling only.
+
 ## [0.1.0] - 2026-08-30
 
 ### Added
@@ -1400,5 +1445,6 @@ Two features earlier plans promised are dropped rather than deferred.
   while nested types inside a response do not. `tests/coverage.rs` checks the
   division against the OAS.
 
-[Unreleased]: https://github.com/hupe1980/rutmf/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hupe1980/rutmf/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/hupe1980/rutmf/releases/tag/v0.2.0
 [0.1.0]: https://github.com/hupe1980/rutmf/releases/tag/v0.1.0
