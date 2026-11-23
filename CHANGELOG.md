@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-23
+
+- Preserve exact JSON numbers for decimal amounts, including large invoices and credits. Reject values outside the exact decimal range.
+- Compare numeric filter operands, sort keys and JSON Patch test values exactly, including amounts that differ by one cent above the floating-point precision limit.
+- Expose RFC 9457 response fields and extensions via `Error::problem()`. HTTP status and retry helpers use the transport status.
+- Document serde_json feature unification and recursive key sorting for consumers that hash serialized JSON.
+
 ## [0.2.0] - 2026-11-20
 
 ### Breaking
@@ -1445,6 +1452,7 @@ Two features earlier plans promised are dropped rather than deferred.
   while nested types inside a response do not. `tests/coverage.rs` checks the
   division against the OAS.
 
-[Unreleased]: https://github.com/hupe1980/rutmf/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/hupe1980/rutmf/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/hupe1980/rutmf/releases/tag/v0.3.0
 [0.2.0]: https://github.com/hupe1980/rutmf/releases/tag/v0.2.0
 [0.1.0]: https://github.com/hupe1980/rutmf/releases/tag/v0.1.0

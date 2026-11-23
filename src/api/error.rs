@@ -6,11 +6,53 @@ use crate::core::TmfError;
 
 use super::transport::TransportError;
 
+/// RFC 9457 details from an `application/problem+json` response.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ProblemDetails {
+    /// Problem type URI reference. Defaults to `about:blank`.
+    pub type_uri: String,
+    /// Short human-readable summary of the problem type.
+    pub title: Option<String>,
+    /// HTTP status reported by the origin. [`Error::status`] gives the wire status.
+    pub status: Option<StatusCode>,
+    /// Explanation specific to this occurrence.
+    pub detail: Option<String>,
+    /// URI reference identifying this occurrence.
+    pub instance: Option<String>,
+    /// Application-defined members, including nested JSON values.
+    pub extensions: serde_json::Map<String, serde_json::Value>,
+}
+
+impl ProblemDetails {
+    pub(super) fn from_slice(body: &[u8]) -> Option<Self> {
+        use serde_json::Value;
+        let mut members: serde_json::Map<String, Value> = serde_json::from_slice(body).ok()?;
+        // RFC 9457 §3.1 requires consumers to ignore individual members with
+        // the wrong type. Preserve extension order when removing known members.
+        let mut string = |key| match members.shift_remove(key) {
+            Some(Value::String(value)) => Some(value),
+            _ => None,
+        };
+        Some(Self {
+            type_uri: string("type").unwrap_or_else(|| "about:blank".into()),
+            title: string("title"),
+            detail: string("detail"),
+            instance: string("instance"),
+            status: members
+                .shift_remove("status")
+                .and_then(|value| u16::try_from(value.as_u64()?).ok())
+                .filter(|status| (100..=599).contains(status))
+                .and_then(|status| StatusCode::from_u16(status).ok()),
+            extensions: members,
+        })
+    }
+}
+
 /// Anything that can go wrong calling a TM Forum API.
 ///
-/// A server that answers with a TMF630 error body surfaces as [`Error::Api`]
-/// with the body parsed, so `code` and `reason` are available as data rather
-/// than as a formatted string.
+/// Use [`Error::tmf_error`] for TMF630 fields and [`Error::problem`] for
+/// RFC 9457 problem details. [`Error::status`] returns the HTTP status.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
@@ -23,7 +65,16 @@ pub enum Error {
         error: Box<TmfError>,
     },
 
-    /// The server returned an error status without a usable TMF error body.
+    /// The response carries RFC 9457 problem details.
+    #[error("HTTP {status}: {}", problem.detail.as_deref().or(problem.title.as_deref()).unwrap_or(&problem.type_uri))]
+    Problem {
+        /// Status from the HTTP response.
+        status: StatusCode,
+        /// Parsed problem details and extension members.
+        problem: Box<ProblemDetails>,
+    },
+
+    /// The server returned an error status with an unrecognized or malformed error body.
     #[error("HTTP {status}: {body}")]
     Status {
         /// The HTTP status code.
@@ -110,6 +161,7 @@ impl Error {
     pub fn status(&self) -> Option<StatusCode> {
         match self {
             Self::Api { status, .. }
+            | Self::Problem { status, .. }
             | Self::Status { status, .. }
             | Self::Accepted { status, .. } => Some(*status),
             _ => None,
@@ -156,6 +208,15 @@ impl Error {
         }
     }
 
+    /// The parsed RFC 9457 body, when supplied.
+    #[must_use]
+    pub fn problem(&self) -> Option<&ProblemDetails> {
+        match self {
+            Self::Problem { problem, .. } => Some(problem),
+            _ => None,
+        }
+    }
+
     /// Whether retrying the identical request could plausibly succeed.
     ///
     /// True for 408, 429 and 5xx — except 501 Not Implemented, which is a
@@ -165,11 +226,7 @@ impl Error {
     /// method.
     #[must_use]
     pub fn is_retryable(&self) -> bool {
-        match self {
-            Self::Transport(_) => true,
-            Self::Api { status, .. } | Self::Status { status, .. } => is_retryable_status(*status),
-            _ => false,
-        }
+        matches!(self, Self::Transport(_)) || self.status().is_some_and(is_retryable_status)
     }
 
     /// Whether the failure was a 404.
@@ -186,8 +243,7 @@ impl Error {
     /// which is a decision only the caller can make, and the reason this is not
     /// retried automatically.
     ///
-    /// True for both shapes a `412` can arrive in, so it does not depend on
-    /// whether the server sent a TMF630 error body with it.
+    /// Uses the HTTP status for every error body format.
     ///
     /// [`Tagged::update`]: super::Tagged::update
     #[must_use]

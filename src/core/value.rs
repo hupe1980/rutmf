@@ -17,11 +17,8 @@ tmf_value! {
     ///
     /// # Precision
     ///
-    /// The v5 OAS types `Money.value` as `number/float`. Storing money in
-    /// binary floating point is a defect regardless of what the schema says, so
-    /// this crate parses into [`Decimal`] and re-emits a JSON number. Values are
-    /// accepted from a JSON number *or* a string, which covers servers that
-    /// (correctly) send `"12.34"` to dodge the float problem.
+    /// Accepts a JSON number or numeric string and emits an exact JSON number.
+    /// Decoding fails if the amount cannot be represented by [`Decimal`].
     ///
     /// ```
     /// use rutmf::core::Money;
@@ -384,120 +381,6 @@ pub enum FeatureRelationshipType {
     Other(String),
 }
 
-/// serde adapter for `Option<Decimal>` on the TMF wire format.
-///
-/// Accepts a JSON number *or* a numeric string, and re-emits a JSON number
-/// keeping integers integral. Public so that code defining its own TMF-shaped
-/// types can reuse it:
-///
-/// ```
-/// use rust_decimal::Decimal;
-/// use serde::{Deserialize, Serialize};
-///
-/// #[derive(Serialize, Deserialize)]
-/// struct Charge {
-///     #[serde(default, with = "rutmf::core::decimal_opt")]
-///     amount: Option<Decimal>,
-/// }
-///
-/// let c: Charge = serde_json::from_str(r#"{"amount":"9.99"}"#).unwrap();
-/// assert_eq!(serde_json::to_string(&c).unwrap(), r#"{"amount":9.99}"#);
-/// ```
-///
-/// # Precision
-///
-/// A [`Decimal`] carries up to 28 significant digits; a JSON number that
-/// `serde_json` can represent carries about 17. Serialising an integral value
-/// is exact, and so is any value `f64` can round-trip — which covers every
-/// monetary amount. Beyond that the emitted number is the nearest `f64`. Send
-/// such values as strings if a server accepts them; the decoder here reads both.
-pub mod decimal_opt {
-    use std::fmt;
-    use std::str::FromStr;
-
-    use rust_decimal::Decimal;
-    use rust_decimal::prelude::ToPrimitive;
-    use serde::de::{self, Visitor};
-    use serde::{Deserializer, Serializer};
-
-    /// Serialises an optional decimal as a JSON number.
-    pub fn serialize<S: Serializer>(
-        value: &Option<Decimal>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        let Some(d) = value else {
-            return serializer.serialize_none();
-        };
-
-        // Emitted as a JSON number to match the OAS (`type: number`). An
-        // integral amount is written as an integer so that a payload carrying
-        // `50` does not come back as `50.0` — round-trip fidelity is asserted
-        // over the vendored spec examples, which use both forms.
-        if d.is_integer() {
-            if let Some(i) = d.to_i64() {
-                return serializer.serialize_i64(i);
-            }
-            if let Some(u) = d.to_u64() {
-                return serializer.serialize_u64(u);
-            }
-        }
-        serializer.serialize_f64(
-            d.to_string()
-                .parse::<f64>()
-                .map_err(serde::ser::Error::custom)?,
-        )
-    }
-
-    /// Deserialises an optional decimal from a JSON number or string.
-    pub fn deserialize<'de, D: Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<Option<Decimal>, D::Error> {
-        struct V;
-
-        impl<'de> Visitor<'de> for V {
-            type Value = Option<Decimal>;
-
-            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("a number or numeric string")
-            }
-
-            fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
-                // `to_string` gives the shortest round-trip representation, so
-                // 12.34_f64 becomes exactly 12.34 rather than 12.339999….
-                Decimal::from_str(&v.to_string())
-                    .map(Some)
-                    .map_err(de::Error::custom)
-            }
-
-            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
-                Ok(Some(Decimal::from(v)))
-            }
-
-            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-                Ok(Some(Decimal::from(v)))
-            }
-
-            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                Decimal::from_str(v).map(Some).map_err(de::Error::custom)
-            }
-
-            fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
-                Ok(None)
-            }
-
-            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
-                Ok(None)
-            }
-
-            fn visit_some<D: Deserializer<'de>>(self, d: D) -> Result<Self::Value, D::Error> {
-                d.deserialize_any(V)
-            }
-        }
-
-        deserializer.deserialize_option(V)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,6 +411,71 @@ mod tests {
         let b: Money = serde_json::from_str(r#"{"unit":"EUR","value":"12.34"}"#).unwrap();
         assert_eq!(a.value, b.value);
         assert_eq!(a.value, Some(Decimal::from_str("12.34").unwrap()));
+    }
+
+    // 004-partner-json/SR-001
+    #[test]
+    fn money_is_exact_or_rejected() {
+        for (wire, expected) in [
+            ("9007199254740992.01", "9007199254740992.01"),
+            ("-9007199254740992.01", "-9007199254740992.01"),
+            (
+                "79228162514264337593543950335",
+                "79228162514264337593543950335",
+            ),
+            (
+                "-79228162514264337593543950335",
+                "-79228162514264337593543950335",
+            ),
+            ("11.90", "11.9"),
+            ("0", "0"),
+            ("10e-29", "0.0000000000000000000000000001"),
+            ("900719925474099201e-2", "9007199254740992.01"),
+            ("0e9999999999999999999999999", "0"),
+        ] {
+            let exact = Decimal::from_str_exact(expected).unwrap();
+            for token in [wire.to_owned(), format!(r#""{wire}""#)] {
+                let money: Money =
+                    serde_json::from_str(&format!(r#"{{"value":{token}}}"#)).unwrap();
+                assert_eq!(money.value, Some(exact), "{token}");
+            }
+            let value = serde_json::to_value(Money::new("EUR", exact)).unwrap();
+            assert_eq!(value["value"].as_number().unwrap().as_str(), expected);
+        }
+        for token in [
+            "1e-29",
+            "1e99999999999999999999",
+            "79228162514264337593543950336",
+            "11.90000000000000000000000000001",
+            "true",
+            "{}",
+            "[]",
+            r#""NaN""#,
+        ] {
+            assert!(
+                serde_json::from_str::<Money>(&format!(r#"{{"value":{token}}}"#)).is_err(),
+                "{token}"
+            );
+        }
+        for wire in ["{}", r#"{"value":null}"#] {
+            assert_eq!(serde_json::from_str::<Money>(wire).unwrap().value, None);
+        }
+    }
+
+    #[test]
+    fn money_in_an_untagged_envelope_keeps_its_numeric_token() {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Entry {
+            Amount(Money),
+            Empty,
+        }
+        let Entry::Amount(money) =
+            serde_json::from_str(r#"{"value":9007199254740992.01}"#).unwrap()
+        else {
+            panic!("expected money");
+        };
+        assert_eq!(money.value, Some("9007199254740992.01".parse().unwrap()));
     }
 
     #[test]

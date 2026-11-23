@@ -188,7 +188,7 @@ pub use crate::core::{JsonPatchOp, PatchOperation, TmfEvent};
 pub(crate) use client::interpret_failure;
 pub use client::{TmfClient, same_origin};
 pub use conditional::{Conditional, EntityTag, Tagged};
-pub use error::{Error, Result};
+pub use error::{Error, ProblemDetails, Result};
 pub use hub::{Hub, HubCreate, HubLookup, HubOps};
 pub use page::{DEFAULT_PAGE_SIZE, Page, PageRequest, PageStream, next_link, paginate};
 pub use patch::Patch;

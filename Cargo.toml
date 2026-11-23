@@ -1,6 +1,6 @@
 [package]
 name = "rutmf"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Ergonomic, v5-first Rust types and clients for the TM Forum Open API domain model (unofficial)"
@@ -31,7 +31,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = { version = "1.0.154", features = ["preserve_order"] }
+serde_json = { version = "1.0.154", features = ["preserve_order", "arbitrary_precision", "raw_value"] }
 indexmap = { version = "2.14.2", features = ["serde"] }
 # RFC 3339 timestamps behind `core::Timestamp`; fixed offsets need no tz database.
 jiff = { version = "1.0.1", default-features = false, features = ["std", "serde"] }
@@ -49,6 +49,8 @@ bytes = { version = "1.12.2", optional = true }
 # --- transport-reqwest ---
 reqwest = { version = "0.13.5", optional = true, default-features = false, features = ["json"] }
 tokio = { version = "1.54.1", optional = true, default-features = false, features = ["sync", "time"] }
+# Exponents of arbitrary JSON numbers used in server sorting and JSON Patch comparisons.
+num-bigint = { version = "0.4.8", optional = true }
 # --- optional server binding (the counterpart of transport-reqwest) ---
 axum = { version = "0.8.7", optional = true, default-features = false, features = ["http1", "tokio"] }
 
@@ -140,7 +142,7 @@ api-tmf679 = ["api", "product"]
 api-tmf635 = ["api", "usage"]
 
 # --- server layer ---
-server = ["api", "dep:async-trait"]
+server = ["api", "dep:async-trait", "dep:num-bigint"]
 server-axum = ["server", "dep:axum", "dep:tokio"]
 
 # --- extras ---

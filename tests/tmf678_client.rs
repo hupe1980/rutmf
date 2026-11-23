@@ -131,3 +131,102 @@ fn the_client_offers_no_operation_tmf678_does_not_declare() {
     // `create_customer_bill` and `delete_customer_bill` deliberately do not,
     // and `tests/coverage.rs` checks that against the vendored paths.
 }
+
+struct Reply(rutmf::api::TmfResponse);
+
+#[async_trait::async_trait]
+impl rutmf::api::Transport for Reply {
+    async fn execute(
+        &self,
+        _: rutmf::api::TmfRequest,
+    ) -> rutmf::api::Result<rutmf::api::TmfResponse> {
+        Ok(self.0.clone())
+    }
+}
+
+fn partner(
+    status: http::StatusCode,
+    media: &'static str,
+    body: &'static str,
+) -> CustomerBillClient {
+    let mut headers = http::HeaderMap::new();
+    headers.insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static(media),
+    );
+    let response = rutmf::api::TmfResponse::new(status, headers, body.into());
+    CustomerBillClient::new("https://partner.test", Reply(response)).unwrap()
+}
+
+// 004-partner-json/SR-001
+#[tokio::test]
+async fn partner_credit_retains_the_cent() {
+    let client = partner(
+        http::StatusCode::OK,
+        "application/json",
+        r#"{"taxIncludedAmount":{"unit":"EUR","value":-9007199254740992.01}}"#,
+    );
+    let bill = client
+        .get_customer_bill("credit", &Query::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        bill.tax_included_amount.unwrap().value,
+        Some("-9007199254740992.01".parse().unwrap())
+    );
+}
+
+// 004-partner-json/SR-002
+#[tokio::test]
+async fn partner_problem_uses_wire_status_and_preserves_extensions() {
+    let client = partner(
+        http::StatusCode::NOT_FOUND,
+        "Application/Problem+JSON; charset=utf-8",
+        r#"{"status":503,"type":"/problems/missing","instance":"/requests/42","title":"Missing bill","detail":"No bill for this account","code":"not-found","pointer":["/id"]}"#,
+    );
+    let error = client
+        .get_customer_bill("missing", &Query::new())
+        .await
+        .unwrap_err();
+    assert!(error.is_not_found());
+    assert!(!error.is_retryable());
+    let problem = error.problem().unwrap();
+    assert_eq!(problem.type_uri, "/problems/missing");
+    assert_eq!(problem.instance.as_deref(), Some("/requests/42"));
+    assert_eq!(problem.title.as_deref(), Some("Missing bill"));
+    assert_eq!(problem.detail.as_deref(), Some("No bill for this account"));
+    assert_eq!(problem.status, Some(http::StatusCode::SERVICE_UNAVAILABLE));
+    assert_eq!(problem.extensions["code"], "not-found");
+    assert_eq!(problem.extensions["pointer"], json!(["/id"]));
+}
+
+#[tokio::test]
+async fn malformed_problem_members_are_ignored_individually() {
+    let client = partner(
+        http::StatusCode::BAD_GATEWAY,
+        "application/problem+json",
+        r#"{"title":5,"detail":"upstream offline","status":"404"}"#,
+    );
+    let error = client
+        .get_customer_bill("42", &Query::new())
+        .await
+        .unwrap_err();
+    assert!(error.is_retryable());
+    let problem = error.problem().unwrap();
+    assert_eq!(problem.type_uri, "about:blank");
+    assert_eq!(problem.title, None);
+    assert_eq!(problem.status, None);
+    assert_eq!(problem.detail.as_deref(), Some("upstream offline"));
+    assert!(problem.extensions.is_empty());
+    for body in ["bad gateway", "[]", "null"] {
+        let error = partner(
+            http::StatusCode::BAD_GATEWAY,
+            "application/problem+json",
+            body,
+        )
+        .get_customer_bill("42", &Query::new())
+        .await
+        .unwrap_err();
+        assert!(matches!(error, rutmf::api::Error::Status { body: raw, .. } if raw == body));
+    }
+}

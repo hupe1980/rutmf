@@ -158,6 +158,10 @@ it. An explicitly numeric segment still selects one element, so
 matches. Reading it as "some element differs" would match a resource that plainly
 has the value you are excluding.
 
+Numeric filters, sorting and JSON Patch `test` compare numbers by their exact
+value. A filter on a large invoice can distinguish adjacent cents. Equivalent
+spellings such as `11.9`, `11.90` and `119e-1` compare equal.
+
 **Reserved parameters are not filters.** `fields`, `offset`, `limit`, `sort`,
 `after`, `before` and `filter` name the request rather than the resource, so the
 handler never matches them against a member. The three collections that declare

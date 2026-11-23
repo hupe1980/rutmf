@@ -341,9 +341,23 @@ match client.get_product_offering("7655", &Query::new()).await {
 }
 ```
 
-A body carrying neither `code` nor `reason` is reported as a raw status with the
-text preserved, so a gateway's own error message is not thrown away by parsing it
-into an empty TMF error.
+A partner returning `application/problem+json` exposes RFC 9457 fields and
+application-defined extensions through `Error::problem()`. For example, on a
+failed bill lookup:
+
+```rust
+if let Some(problem) = error.problem() {
+    let code = problem.extensions.get("code").and_then(|value| value.as_str());
+    if error.is_not_found() && code == Some("not-found") {
+        eprintln!("{}", problem.detail.as_deref().unwrap_or("Bill unavailable"));
+    }
+}
+```
+
+`error.status()` and retry classification follow the HTTP response. The
+advisory status in the JSON body is available separately as `problem.status`.
+Undecodable problem documents, unrecognized gateway responses, and ordinary
+JSON bodies without a TMF code or reason retain a bounded text diagnostic.
 
 ### Writes that have not happened yet
 

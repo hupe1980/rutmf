@@ -43,3 +43,4 @@ target
 /specs/
 /.specify/
 /.claude/
+/.agents/skills/speckit-*/

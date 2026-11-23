@@ -99,65 +99,6 @@ Because TMF688 has no v5, what v5 actually ships for events is the per-API
 hub/listener pattern rather than a central event bus. That is what
 [the event support](@/docs/calling-an-api.md#events) models.
 
-## Why fifteen and not ninety-six
-
-TM Forum publishes around ninety-six API repositories. Covering them all would
-mean generating the model from the OpenAPI documents, and this crate deliberately
-does not.
-
-The reason is that the gate would stop meaning anything. The schema-coverage
-suite compares the Rust model against the OpenAPI document; if the model were
-*generated from* that document, the comparison is `f(X)` against `X` — it passes
-by construction and proves nothing. Every defect that gate has caught was
-catchable only because a human wrote the model independently of the check.
-
-The second reason is that the interesting decisions are not derivable from the
-schemas at all:
-
-- Twelve `…Characteristic` and five `…ContactMedium` schemas are each **one**
-  Rust type, because they are a polymorphic family. Schema-by-schema generation
-  emits eighteen types and loses the union.
-- TMF622 and TMF637 both declare `Product`. It is **one** type, because they
-  declare it identically. A generator emits two.
-- TMF638 and TMF639 both declare `Feature`. It is **two** types, because they are
-  different schemas under one name. A generator that deduplicated by name emits
-  one, and lets you set a member the server drops.
-
-Each of those is a judgement about what the API *means*. So the offer is fifteen
-APIs done properly and provably, rather than ninety-six done mechanically.
-
-Adding an API is a tractable contribution: the coverage suite's failure output
-*is* the to-do list. See
-[CONTRIBUTING](https://github.com/hupe1980/rutmf/blob/main/CONTRIBUTING.md).
-
 ## Status and stability
 
-**0.1 — early.** The design is settled and proven against the specifications, and
-both directions work: calling a TM Forum API and serving one. The API surface
-will still move before 1.0, so pin an exact version.
-
-Four things stand between here and a 1.0 that promises stability:
-
-1. **A release cycle of real use** with the module layout held still. It has
-   moved with each round of review, and each move would have been a breaking
-   change after 1.0.
-2. **Conformance against TM Forum's own CTK.** The kit and the reference
-   implementations ship as Docker images, but through TM Forum's own channels
-   rather than a public registry — so this needs membership, not engineering.
-   Until a real run happens, "conformant" here means three specific things: the
-   model agrees with the specification documents, every vendored example parses
-   and round-trips, and the server answers every collection every document
-   declares with the right status codes and headers. What none of those can tell
-   you is whether the crate agrees with somebody else's *implementation*.
-3. **A second implementor.** Every API here was modelled by one person reading
-   the same documents. The coverage gate catches transcription errors; it cannot
-   catch a misreading the mapping shares.
-4. **A settled decision on `#[non_exhaustive]`.** It makes a TM Forum minor
-   release non-breaking, at the permanent cost of struct-update syntax
-   downstream. 1.0 is where that stops being reversible.
-
-Two things earlier plans promised are **dropped, not pending**: a code generator
-for the long-tail APIs (for the reasons above) and an `mcp` feature. MCP is an
-application-level decision — which tools, which scopes, whose credentials — and
-the `schemars` feature already supplies everything needed to build one outside
-this crate.
+During 0.x, minor releases may change public APIs. The conformance suite checks the published OpenAPI documents, examples and server behavior. TM Forum CTK certification is outside its scope.

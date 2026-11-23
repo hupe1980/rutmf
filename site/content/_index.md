@@ -4,35 +4,35 @@ description = "Ergonomic, v5-first Rust types and clients for the TM Forum Open 
 template = "index.html"
 
 [extra]
-lede = "A v5-first Rust crate for the TM Forum Open APIs: SID-aligned domain types with the HTTP clients layered strictly on top. Create and update are different types because the specification says so, money is a decimal, references know what they point at — and every claim here is checked against the official documents in CI."
+lede = "Model resources, call partner APIs and serve TM Forum endpoints in Rust. Enable the domain models and clients your application needs."
 
 [[extra.features]]
-title = "Create and update are different types"
-body = "TMF v5 defines each resource three times — read, `_FVO` for `POST`, `_MVO` for `PATCH`. Flattening the three into one all-optional struct leaves every mistake to the server. Here a missing required member is a compile error, and a server-owned field is absent from the type entirely."
+title = "Operation-specific types"
+body = "Read models and create and update builders follow the fields each TMF operation accepts."
 
 [[extra.features]]
-title = "Payloads survive a round trip"
-body = "Decode then re-encode is lossless by value. Vendor extensions are kept in document order, timestamps keep their UTC offset, and nothing is invented — a payload that omits `@type` comes back without one."
+title = "Round-trip fidelity"
+body = "Vendor extensions retain their order, timestamps keep their UTC offset, and omitted type discriminators stay absent."
 
 [[extra.features]]
-title = "References are typed"
-body = "`Ref<ProductOffering>` rather than a stringly-typed identifier. The compiler tracks what a reference points at, and resolving one returns the right type with no turbofish and no path string."
+title = "Typed references"
+body = "A `Ref<ProductOffering>` resolves to a product offering through its client."
 
 [[extra.features]]
-title = "A PATCH cannot discard someone else's edit"
-body = "A TMF `PATCH` is read-modify-write, so two clients editing different members of one order each overwrite the other — both get `200`, and nothing says so. Read a resource with the `ETag` the server issued and write back through it, and a concurrent edit is a `412` instead."
+title = "Conditional writes"
+body = "Use an ETag with `If-Match` to detect concurrent edits. A stale write returns HTTP 412."
 
 [[extra.features]]
-title = "Money is a decimal"
-body = "The v5 schema types `Money.value` as a float. Storing money in binary floating point is a defect whatever the schema says, so values parse into `rust_decimal::Decimal` and re-emit as JSON numbers, keeping integers integral."
+title = "Exact monetary amounts"
+body = "Read invoices and credits as decimals and emit exact JSON numbers, including amounts above the binary floating-point precision limit."
 
 [[extra.features]]
-title = "The transport is yours"
-body = "Clients are generic over a minimal `Transport` trait. `reqwest` is one line away behind a feature flag, with OAuth2 client-credentials, retries and full-jitter backoff — or bring a `tower` stack, or a fake."
+title = "Client transports and errors"
+body = "Use reqwest with OAuth2 or supply a transport. Read TMF630 errors and RFC 9457 problem details directly from the client error."
 
 [[extra.features]]
-title = "Serve an API, not just call one"
-body = "Implement five storage methods, none of them about HTTP, and get TMF630 routing, filtering, paging, projection, the four `PATCH` flavours, `ETag` with `If-Match` and `If-None-Match`, and the `/hub` notifications a conformant server owes."
+title = "Server support"
+body = "Connect a resource store to TMF630 routing, filtering, paging, JSON Patch and hub notifications."
 
 [[extra.apis]]
 id = "TMF620"
@@ -125,20 +125,10 @@ version = "v5.0.0"
 resources = "Resource (four subclasses), ResourceGraph"
 +++
 
-## Built for integration work
-
-TM Forum's Open APIs are the contract between OSS/BSS systems, and code that
-speaks them lives or dies on details: a vendor extension that must survive a
-round trip, a price that must not be a float, a `PATCH` body that must match the
-content type it was sent under.
-
-`rutmf` puts those details in the type system, then proves it. The domain model
-is checked member by member against the pinned v5 OpenAPI documents, and every
-official example in those documents must parse and re-serialise unchanged —
-both on every commit.
+## Create a product offering
 
 ```rust
-use rutmf::api::{Query, tmf620::ProductCatalogClient};
+use rutmf::api::tmf620::ProductCatalogClient;
 use rutmf::core::Timestamp;
 use rutmf::product::ProductOfferingCreate;
 
@@ -157,7 +147,3 @@ let offering = client.create_product_offering(
         .build(),
 ).await?;
 ```
-
-Together the fifteen APIs close the loop from shelf to network: browse a catalog,
-identify who is buying, engage them as a customer, place the order — then find
-what the customer actually has, what delivers it, and what that runs on.
