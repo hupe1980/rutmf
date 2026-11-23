@@ -34,168 +34,14 @@ let page = client
 The domain model and the HTTP clients are separate: `rutmf::product` has no idea
 HTTP exists, and `cargo add rutmf` pulls in no TLS stack.
 
-## ✨ Design decisions
+## Working with TMF v5
 
-TM Forum's specifications leave a lot of room, and most of the work of a client
-library is in the choices. These are the ones this crate makes.
+- Create and update builders follow the fields each operation accepts. Typed references identify the resource they resolve to.
+- Vendor extensions retain their key order. Timestamps preserve their UTC offset. `Money` reads decimal numbers or numeric strings and emits exact JSON numbers.
+- Clients support pagination, same-origin reference resolution and conditional writes with ETags. `Error::problem()` exposes RFC 9457 details and extension members. `Error::tmf_error()` exposes TMF630 errors.
+- Use `MockTmfServer` to exercise client calls against an in-process server.
 
-**✍️ Create and update are different types, because v5 says so.** TMF v5 defines
-each resource three times — the read model, an `_FVO` for `POST`, an `_MVO` for
-`PATCH` — and they differ in which members exist and which are required.
-Flattening the three into one all-optional struct leaves every mistake to be
-caught by the server at runtime. Keeping them apart makes it a compile error:
-
-```rust
-use rutmf::core::Timestamp;
-use rutmf::product::ProductOfferingCreate;
-
-// `name`, `lifecycle_status` and `last_update` are required on create.
-// Leaving one out does not compile.
-let body = ProductOfferingCreate::builder()
-    .name("Business Internet")
-    .lifecycle_status("Active")
-    .last_update(Timestamp::now())
-    .build();
-```
-
-`ProductOfferingUpdate` has the mirror-image property: `id`, `href` and
-`lastUpdate` are server-owned, so they are absent from the type entirely.
-
-**🔄 Payloads survive a round trip.** Real TMF deployments are full of vendor
-extensions. Anything the crate has no field for is captured in `extensions`, in
-document order, and re-emitted:
-
-```rust
-let json = r#"{"id":"7655","name":"Basic Firewall","@type":"ProductOffering","x-vendor":{"tier":2}}"#;
-let offering: ProductOffering = serde_json::from_str(json)?;
-
-assert_eq!(offering.extensions.get("x-vendor").unwrap()["tier"], 2);
-assert_eq!(serde_json::to_value(&offering)?, serde_json::from_str::<serde_json::Value>(json)?);
-```
-
-Decoding then re-encoding is **lossless by value**: every input member with a
-value comes back with an equal value, extension order is preserved, timestamps
-keep their UTC offset, and **nothing is invented** — a payload that omits the
-spec-mandatory `@type` comes back without one, because middleware must not add
-members to what it relays.
-
-One exception: an explicit `null` on a member the crate *models* reads as
-absence and is not re-emitted — `Option<T>` has two states where that needs
-three. A `null` on an unmodelled member round-trips through `extensions`. Where
-the distinction is real — RFC 7386 makes `null` how a **merge patch removes a
-member** — the `…Update` types say it:
-
-```rust
-let update = ProductOfferingUpdate::builder()
-    .name("Business Internet")
-    .build()
-    .deleting("description");     // → {"name": "…", "description": null}
-```
-
-**🧬 A subclass is a value, not a string.** TMF v5 gives a characteristic's value
-shape its own class — `IntegerCharacteristic`, `StringArrayCharacteristic`, ten
-more — and the subclass *follows from the value*, so it is derived:
-
-```rust
-use rutmf::core::{Characteristic, ValueKind};
-
-let speed = Characteristic::new("downstreamSpeed", 100);
-assert_eq!(speed.type_name(), "IntegerCharacteristic");
-assert_eq!(speed.value_kind(), ValueKind::Integer);
-```
-
-Six enumerations cover v5's seven polymorphic families, each with `all()` /
-`from_type_name` / `type_name`, and `tests/coverage.rs` checks each against its
-schema's `discriminator.mapping` in both directions.
-
-**🔗 References know what they point at.** `Ref<ProductOffering>` rather than a
-stringly-typed identifier, so `reference.resolve(&client, &query)` hands back a
-`ProductOffering` with no turbofish and no path string.
-
-**🔐 A server cannot redirect your credentials.** TMF payloads are full of URLs the
-*server* wrote — the `href` of every `…Ref`, the `Link: rel="next"` of every paged
-collection — and a transport attaches its bearer token to whatever URL it is
-handed. Following those wherever they point would make any reference in any
-response a place to put an attacker's host and collect a live token. So both are
-checked against the client's own origin, and one that leaves it raises
-`Error::CrossOrigin` instead:
-
-```rust
-// Within a deployment the TMF APIs share a host and differ by path, so this
-// is the ordinary case and it just works.
-let spec = reference.resolve(client, &Query::new()).await?;
-
-// Federating across hosts stays possible — it has to be asked for, so that
-// trusting the other end is a decision rather than a default.
-let spec = reference.resolve_cross_origin(client, &Query::new()).await?;
-```
-
-**🔒 A `PATCH` cannot silently discard someone else's edit.** A TMF `PATCH` is
-read-modify-write, so two operators editing different members of one order each
-overwrite the other — with `200` to both, and nothing to say so. A read can carry
-the `ETag` the server issued, and writing through that tag makes the write
-conditional:
-
-```rust
-use rutmf::api::{Conditional, Tagged};
-
-let held: Tagged<ProductOrder> = client.inner().fetch("42", &Query::new()).await?;
-println!("{:?}", held.state);              // `Tagged<T>` derefs to `T`
-
-// Refused with a 412 if anyone edited the order in between, rather than
-// overwriting their change.
-match held.update(client.inner(), &update).await {
-    Err(e) if e.is_precondition_failed() => { /* re-read and decide */ }
-    other => other?,
-}
-```
-
-The v5 documents declare no request headers, so this is RFC 9110 rather than TMF
-— a server that ignores the precondition answers as it would without one, and
-`fetch` reports whether a tag was issued. The server layer here is the other end
-of the same exchange.
-
-**💰 Money is a decimal.** The v5 OAS types `Money.value` as `number/float`. Storing
-money in binary floating point is a defect no matter what the schema says, so
-values parse into `rust_decimal::Decimal` and re-emit as JSON numbers, keeping
-integers integral.
-
-**🏷️ A `PATCH` body cannot be labelled wrong.** TMF v5 declares four `PATCH` content
-types and pairs each with a body schema. Passing the body and the content type
-separately lets you send a combination every server rejects, so they are one type
-here:
-
-```rust
-use rutmf::api::{JsonPatchOp, Patch};
-
-client.update_product_offering("42", &update).await?;               // merge patch
-client.update_product_offering("42", &ops).await?;                  // RFC 6902 list
-client.update_product_offering("42", Patch::Query(&ops)).await?;    // TMF JSONPath
-```
-
-**🎁 A prelude of traits, not types.** `reference()`, `resolve()`, `fetch()` and
-`register_listener()` each live on a trait, and Rust does not offer a trait
-method until the trait is in scope. `use rutmf::prelude::*;` brings those in and
-nothing else — concrete types stay in their domain module.
-
-**🧪 A TMF server for your tests.** `MockTmfServer` implements the TMF630 collection
-semantics in process — filtering with the comparison operators, sorting,
-`fields=` projection, paging with count headers and a `206`, merge patch and
-*atomic* RFC 6902 patch — behind the same `Transport` seam the real clients use:
-
-```rust
-let server = MockTmfServer::new();
-server.seed("productOffering", serde_json::json!({
-    "id": "7655", "name": "Basic Firewall", "@type": "ProductOffering",
-}));
-
-let client = ProductCatalogClient::new(server.base_url(), server.transport())?;
-let page = client.list_product_offerings(&Query::new()).await?;
-assert_eq!(page.total_count, Some(1));
-```
-
-→ [Full guides](https://hupe1980.github.io/rutmf/docs/), including queries,
-pagination, retries, OAuth2, events and the server layer.
+[Domain model](https://hupe1980.github.io/rutmf/docs/domain-model/) · [Client guide](https://hupe1980.github.io/rutmf/docs/calling-an-api/) · [Testing guide](https://hupe1980.github.io/rutmf/docs/testing/)
 
 ## 📦 Installation
 
@@ -211,10 +57,10 @@ cargo add rutmf --features api-tmf620,transport-reqwest
 
 | Feature | Default | Enables |
 |---|---|---|
-| `party`, `customer`, `product`, `order`, `service`, `resource`, `ticket`, `alarm`, `bill`, `account` | ✅ | domain models (pure types, no I/O) |
+| `party`, `customer`, `product`, `order`, `service`, `resource`, `ticket`, `alarm`, `bill`, `account`, `usage` | ✅ | domain models (pure types, no I/O) |
 | `api` | | transport-agnostic client layer |
 | `transport-reqwest` | | ready-made `reqwest` transport, with OAuth2 client-credentials |
-| `api-tmf620` … `api-tmf639` | | one per covered API, see below |
+| `api-tmf620` … `api-tmf679` | | one per covered API, see below |
 | `server` | | implement a TMF API: `ResourceStore` + `TmfHandler` |
 | `server-axum` | | ready-made `axum` `Router` for the above |
 | `mock` | | in-process TMF server for tests |
@@ -223,6 +69,24 @@ cargo add rutmf --features api-tmf620,transport-reqwest
 
 MSRV is **1.88**, verified in CI. The domain model builds for
 `wasm32-unknown-unknown`.
+
+### Hashing or signing JSON
+
+rutmf enables serde_json’s `preserve_order` and `arbitrary_precision` features.
+Cargo unifies features for the same serde_json package across normal dependencies,
+so other `serde_json::Value` objects in your application also retain insertion
+order and numeric spellings. If your digest contract uses lexically sorted keys,
+apply the same rule before sealing and after loading JSON from storage.
+
+```rust
+let mut document: serde_json::Value = serde_json::from_str(r#"{"z":[{"y":1,"x":2}],"a":0}"#)?;
+document.sort_all_objects();
+let bytes = serde_json::to_vec(&document)?;
+assert_eq!(bytes, br#"{"a":0,"z":[{"x":2,"y":1}]}"#);
+```
+
+This sorts object keys recursively and retains array order. Agree on number
+formatting too when independent producers or a database can rewrite numbers.
 
 ## 🗺️ Coverage
 
@@ -267,14 +131,7 @@ otherwise.
 
 ## 🏗️ Serving a TMF API
 
-The other direction: you have the data, and you need to expose it as a conformant
-TM Forum API. Implement five methods — none of them about HTTP — and `TmfHandler`
-supplies TMF630 routing, filtering, sorting, `fields=` projection, paging with
-count headers — offset/limit *and* the cursor pagination TMF621, TMF635 and TMF639
-declare — all four `PATCH` content types, `ETag` with `If-Match` on writes and
-`If-None-Match` on reads, error bodies and status codes. Add
-`.with_max_page_size(100)` and an unbounded collection `GET` stops being
-something a caller can ask for.
+Implement `ResourceStore` and give `TmfHandler` the API to serve. The handler provides routing, paging, filtering, projection, conditional requests and JSON Patch.
 
 ```rust
 #[async_trait::async_trait]
@@ -293,82 +150,11 @@ let app = axum::Router::new().nest(
 );
 ```
 
-**It serves exactly what the specification declares.** The handler is built for
-one API, and a method that API does not declare on a path is answered `405` with
-an `Allow` header before the store hears of it — a TMF678 server refuses
-`POST /customerBill` and `DELETE /customerBill/{id}` because TMF678 declares
-neither, with no guard in your store. A collection the API does not declare is a
-`404`. An API this crate does not cover is served the same way from an `Api` you
-declare yourself.
-
-It serves `/hub` and **raises the notifications** a conformant server owes: a
-write through the API becomes the right `{Resource}{Kind}Event`, matched against
-each subscription's filter and addressed to its `/listener/{eventName}` URL. The
-`Notifier` seam is the one part a deployment must supply — whether delivery is a
-blocking `POST`, a queue publish or a retry loop.
-
-Getting the *right* event name is not the one-liner it looks like. TMF621 and
-TMF634 raise `…StatusChangeEvent` where the other thirteen raise
-`…StateChangeEvent` — and TMF634 does so over a member it still spells
-`lifecycleStatus`, so the difference cannot be read off the resource. TMF638
-separates an operational move (`serviceOperatingStatusChangeEvent`) from an
-administrative one. A server that guesses raises names nobody has subscribed to,
-and the failure is silent at both ends. So the spelling is read out of the
-specifications’ `/listener/…` paths, and `tests/coverage.rs` fails if all **160** of
-them are not reproducible from the collection and the kind.
-
-`MockTmfServer` *is* `TmfHandler<MemoryStore>` with a `Notifier` that records
-instead of sending, so the test double and a real deployment run the same code
-and cannot drift.
-
-→ [Serving an API](https://hupe1980.github.io/rutmf/docs/serving-an-api/)
+Undeclared collections return HTTP 404. Unsupported methods return HTTP 405 with an `Allow` header. Configure a `Notifier` to deliver hub events. [Serving an API](https://hupe1980.github.io/rutmf/docs/serving-an-api/)
 
 ## 🔬 Conformance
 
-Three suites, because each is blind where the others see.
-
-**Against the examples.** `tests/fixtures/` holds **610 `components.examples`
-values** vendored verbatim from the TM Forum [specification repositories][tmf-repos]
-(Apache-2.0). Every one must parse and round-trip, and a separate test fails if
-any fixture falls outside the mapping, so a new one cannot be a silently untested
-one.
-
-**Against the schemas.** Round-tripping proves nothing about coverage: an unknown
-member survives in `extensions` whether or not the model understands it. So this
-suite reads the pinned OpenAPI documents and checks **219 Rust types against
-490 v5 schemas** — member presence in both directions, member types, enumeration
-values, requiredness, discriminator values against each schema's own
-`discriminator.mapping`, that every reference names the class the spec declares,
-that a member with a closed vocabulary is an `enum` rather than a `String`, that
-a `date-time` member is a `Timestamp`, and that the fifteen specifications do not
-disagree about a shared type.
-
-**Against the schemas, in reverse.** "Every Rust type maps to a schema" is
-satisfied by a crate modelling three schemas out of three thousand, so the suite
-also asks the opposite: **every schema the fifteen documents declare must be
-modelled, or named in `NOT_MODELLED` with the reason.** Nothing may be merely
-absent. What that leaves out is the value arms of `PlaceRefOrValue`
-(TMF673/674/675 geography and its GeoJSON geometry) and `IntentRefOrValue`
-(TMF921) — APIs outside the fifteen, where the crate models the *reference* arm
-and a value arm round-trips through `extensions`.
-
-**Against a running server.** The other two check documents. This one reads each
-pinned specification, discovers the collections and methods it declares, and
-drives the server layer over a real socket for **all 44** — asserting the status
-codes, the count headers, the `ETag`, and that a missing resource is a `404`
-with a TMF630 body. It is spec-driven, so a new API extends it with no new test
-code.
-
-```console
-cargo test --test conformance
-cargo test --test coverage --features schemars
-cargo test --test server_conformance --features server-axum,transport-reqwest
-```
-
-`cargo deny check` runs in CI over the full dependency tree. Only `rustls` is
-enabled as a TLS backend, and `openssl-sys` is banned outright.
-
-[tmf-repos]: https://github.com/tmforum-apis
+The test suite checks 610 official examples, maps 219 Rust types to 490 schemas, and exercises server responses against the operations declared by all 15 supported APIs. See the [coverage guide](https://hupe1980.github.io/rutmf/docs/coverage/) for the scope of those checks.
 
 ## 🚀 Examples
 
@@ -395,17 +181,9 @@ cargo run --example serve_catalog       --features server-axum,api-tmf620,transp
 
 💡 The first five need no network — they run against the in-process test server.
 
-## 🚧 Status
+## Stability
 
-**0.1 — early.** The design is settled and proven against the specifications, and
-both directions work: calling a TM Forum API and serving one. The API surface
-will still change before 1.0. Pin an exact version.
-
-Four things stand between here and 1.0: a release cycle of real use with the
-module layout held still, conformance against TM Forum's own CTK (which needs
-membership — the kit is not publicly pullable), one API modelled by somebody
-else, and a settled decision on the `#[non_exhaustive]` trade-off. See
-[status and stability](https://hupe1980.github.io/rutmf/docs/coverage/#status-and-stability).
+During 0.x, minor releases may change public APIs. See the [changelog](CHANGELOG.md) before upgrading.
 
 ## 🙏 Credit
 

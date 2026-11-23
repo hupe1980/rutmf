@@ -86,7 +86,8 @@ assert_eq!(serde_json::to_string(&offering)?, r#"{"id":"7655"}"#); // unchanged
 
 It is **not** byte-for-byte: known members are emitted in declaration order, JSON
 number formatting is normalised, and fractional seconds are re-emitted in SI
-groups. Compare with `serde_json::Value` equality, not string equality.
+groups. Compare monetary values as decimals. A `serde_json::Number` can retain
+distinct spellings of the same value.
 
 This property is enforced across all 610 vendored specification examples plus
 `proptest` generators.
@@ -222,13 +223,7 @@ guess. The arithmetic is [`jiff`](https://docs.rs/jiff)'s, re-exported as
 
 ## Money is a decimal
 
-The v5 OAS types `Money.value` as `number/float`. Storing money in binary
-floating point is a defect no matter what the schema says, so values parse into
-`rust_decimal::Decimal`.
-
-The codec accepts a JSON number *or* a string, and re-emits a JSON number that
-keeps integers integral — `50` does not become `50.0`. It is public as
-`core::decimal_opt` if you need the same behaviour on your own types.
+`Money.value` accepts a JSON number or numeric string and stores it as a `rust_decimal::Decimal`. An invoice of `9007199254740992.01` and its negative credit serialize as exact JSON numbers. Decoding fails if the value would require rounding. Use `core::decimal_opt` for the same behavior on your own fields.
 
 ## `@type` polymorphism
 

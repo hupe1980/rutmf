@@ -291,20 +291,39 @@ impl TmfClient {
 
 /// Turns a non-2xx response into the richest error the body supports.
 ///
-/// Every member of [`TmfError`] is optional, so *any* JSON object deserializes
-/// into one; [`TmfError::is_populated`] is what distinguishes a real TMF630
-/// error body from a gateway's own JSON, which belongs in [`Error::Status`]
-/// where the raw text survives.
+/// RFC 9457 is selected by media type. Other responses are recognized as
+/// TMF630 by their populated fields. Both paths retain a bounded raw
+/// diagnostic when their body cannot be decoded.
 pub(crate) fn interpret_failure(response: &TmfResponse) -> Error {
-    match serde_json::from_slice::<TmfError>(&response.body) {
-        Ok(error) if error.is_populated() => Error::Api {
-            status: response.status,
+    let status = response.status;
+    let is_problem = response
+        .headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|header| header.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .is_some_and(|media| {
+            media
+                .trim()
+                .eq_ignore_ascii_case("application/problem+json")
+        });
+    if is_problem {
+        if let Some(problem) = super::ProblemDetails::from_slice(&response.body) {
+            return Error::Problem {
+                status,
+                problem: Box::new(problem),
+            };
+        }
+    } else if let Ok(error) = serde_json::from_slice::<TmfError>(&response.body)
+        && error.is_populated()
+    {
+        return Error::Api {
+            status,
             error: Box::new(error),
-        },
-        _ => Error::Status {
-            status: response.status,
-            body: truncate(&String::from_utf8_lossy(&response.body)),
-        },
+        };
+    }
+    Error::Status {
+        status,
+        body: truncate(&String::from_utf8_lossy(&response.body)),
     }
 }
 

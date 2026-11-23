@@ -45,9 +45,7 @@ light_theme = "ayu-light"
 dark_theme = "ayu-dark"
 
 [link_checker]
-# docs.rs and crates.io serve nothing until the crate is published, and the
-# GitHub repository is not public yet either. Every other external link is
-# checked on each build, which is what catches a moved TM Forum page.
+# External service links are excluded from the Zola build-time check.
 skip_prefixes = [
   "https://docs.rs/",
   "https://crates.io/",
@@ -57,7 +55,6 @@ skip_prefixes = [
 [extra]
 # Consumed by templates/base.html for navigation, meta tags and structured data.
 crate_name = "rutmf"
-crate_version = "0.2"
 repo_url = "https://github.com/hupe1980/rutmf"
 docsrs_url = "https://docs.rs/rutmf"
 cratesio_url = "https://crates.io/crates/rutmf"

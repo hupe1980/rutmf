@@ -13,6 +13,8 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value};
 
+use crate::core::decimal_opt;
+
 /// Query parameters that control the response shape rather than filter it.
 const RESERVED: &[&str] = &[
     "fields", "offset", "limit", "sort", "after", "before", "filter",
@@ -151,8 +153,8 @@ fn compare(actual: &Value, op: &str, expected: &str) -> bool {
 /// A date-only operand — `orderDate.gte=2026-01-01`, which is how a client
 /// writes a day bound — is read as the start of that day in UTC.
 fn order(actual: &Value, expected: &str) -> Option<Ordering> {
-    if let (Some(a), Ok(b)) = (actual.as_f64(), expected.parse::<f64>()) {
-        return a.partial_cmp(&b);
+    if let Value::Number(number) = actual {
+        return decimal_opt::compare(number.as_str(), expected);
     }
     if let Value::String(s) = actual
         && let (Some(a), Some(b)) = (instant(s), instant(expected))
@@ -161,7 +163,6 @@ fn order(actual: &Value, expected: &str) -> Option<Ordering> {
     }
     match actual {
         Value::String(s) => Some(s.as_str().cmp(expected)),
-        Value::Number(n) => Some(n.to_string().as_str().cmp(expected)),
         _ => None,
     }
 }
@@ -267,10 +268,9 @@ pub fn sort_resources(resources: &mut [Value], sort: &str) {
 
 fn compare_values(left: &Value, right: &Value) -> Ordering {
     match (left, right) {
-        (Value::Number(a), Value::Number(b)) => a
-            .as_f64()
-            .partial_cmp(&b.as_f64())
-            .unwrap_or(Ordering::Equal),
+        (Value::Number(a), Value::Number(b)) => {
+            decimal_opt::compare(a.as_str(), b.as_str()).expect("valid JSON numbers")
+        }
         // Two timestamps order as instants, for the reason `order` gives: with
         // mixed offsets, text ordering is wrong rather than merely coarse, and
         // `sort=-orderDate` over such a collection would hand back a page in an
@@ -486,7 +486,7 @@ fn apply_one(target: &mut Value, operation: &Value) -> Result<(), String> {
                 .ok_or_else(|| "'test' is missing 'value'".to_owned())?;
             let actual = resolve_pointer(target, pointer)
                 .ok_or_else(|| format!("path '{pointer}' does not exist"))?;
-            if actual == expected {
+            if patch_values_equal(actual, expected) {
                 Ok(())
             } else {
                 Err(format!("test failed at '{pointer}'"))
@@ -709,11 +709,29 @@ fn remove_path(root: &mut Value, pointer: &str) -> Result<(), String> {
     }
 }
 
+// RFC 6902 §4.6 uses numerical equality at every depth of a test value.
+fn patch_values_equal(actual: &Value, expected: &Value) -> bool {
+    match (actual, expected) {
+        (Value::Number(a), Value::Number(b)) => {
+            a == b || decimal_opt::compare(a.as_str(), b.as_str()) == Some(Ordering::Equal)
+        }
+        (Value::Array(a), Value::Array(b)) => {
+            a.len() == b.len() && a.iter().zip(b).all(|(x, y)| patch_values_equal(x, y))
+        }
+        (Value::Object(a), Value::Object(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .all(|(key, x)| b.get(key).is_some_and(|y| patch_values_equal(x, y)))
+        }
+        _ => actual == expected,
+    }
+}
+
 /// Compares a JSON value against the string form a query parameter carries.
 fn scalar_eq(actual: &Value, expected: &str) -> bool {
     match actual {
         Value::String(s) => s == expected,
-        Value::Number(n) => n.to_string() == expected,
+        Value::Number(n) => decimal_opt::compare(n.as_str(), expected) == Some(Ordering::Equal),
         Value::Bool(b) => b.to_string() == expected,
         Value::Null => expected == "null",
         _ => false,
@@ -833,6 +851,32 @@ mod tests {
             &resource,
             &query(&[("orderDate.lt", "2026-06-15")])
         ));
+    }
+
+    #[test]
+    fn precise_numbers_compare_by_value_in_filters_sorting_and_patch_tests() {
+        let mut bills: Vec<Value> =
+            serde_json::from_str(r#"[{"n":9007199254740992.02},{"n":9007199254740992.01}]"#)
+                .unwrap();
+        assert!(matches_filters(
+            &bills[0],
+            &query(&[("n.gt", "9007199254740992.01")])
+        ));
+        assert!(matches_filters(
+            &bills[1],
+            &query(&[("n", "900719925474099201e-2")])
+        ));
+        sort_resources(&mut bills, "n");
+        assert_eq!(bills[0]["n"].to_string(), "9007199254740992.01");
+        let mut target: Value =
+            serde_json::from_str(r#"{"items":[{"a":11.90,"b":-1e999999999999999999999,"c":0}]}"#)
+                .unwrap();
+        let patch: Value = serde_json::from_str(r#"[{"op":"test","path":"/items","value":[{"c":-0.0,"b":-10e999999999999999999998,"a":11.9}]}]"#).unwrap();
+        apply_json_patch(&mut target, &patch).unwrap();
+        let unequal: Value =
+            serde_json::from_str(r#"[{"op":"test","path":"/n","value":9007199254740992.02}]"#)
+                .unwrap();
+        assert!(apply_json_patch(&mut bills[0], &unequal).is_err());
     }
 
     #[test]

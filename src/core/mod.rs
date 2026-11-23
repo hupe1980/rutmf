@@ -75,6 +75,7 @@ mod patch;
 mod reference;
 mod refs;
 
+pub mod decimal_opt;
 #[cfg(feature = "schemars")]
 mod schema;
 mod state;
@@ -107,7 +108,6 @@ pub use time::{Timestamp, TimestampError};
 pub use value::{
     CreditProfile, Duration, FeatureRelationshipType, Money, Note, PlaceRefOrValue, Price,
     Quantity, RelatedPlace, TaskState, TaxDefinition, TaxExemptionCertificate, TaxItem, TimePeriod,
-    decimal_opt,
 };
 
 /// A body that a `PATCH` may carry as a whole-resource merge.

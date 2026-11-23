@@ -72,18 +72,17 @@ proptest! {
         prop_assert_eq!(original, serde_json::to_value(&parsed)?);
     }
 
-    /// Money keeps its exact decimal value and its integral-vs-fractional form.
+    /// Exercise the entire Decimal coefficient and scale through a buffered JSON value.
     #[test]
-    fn money_round_trips_exactly(units in -1_000_000i64..1_000_000, cents in 0u32..100) {
-        let literal = if cents == 0 {
-            json!(units)
-        } else {
-            json!(format!("{units}.{cents:02}").parse::<f64>().unwrap())
-        };
-        let original = json!({"unit": "EUR", "value": literal});
-
-        let parsed: Money = serde_json::from_value(original.clone())?;
-        prop_assert_eq!(original, serde_json::to_value(&parsed)?);
+    fn money_round_trips_exactly(
+        words in any::<[u32; 3]>(), negative in any::<bool>(), scale in 0..=28u32,
+    ) {
+        let amount = rust_decimal::Decimal::from_parts(words[0], words[1], words[2], negative, scale);
+        let document = serde_json::to_value(Money::new("EUR", amount))?;
+        let number = document["value"].as_number().expect("a JSON number");
+        prop_assert_eq!(rust_decimal::Decimal::from_str_exact(number.as_str()).unwrap(), amount);
+        let parsed: Money = serde_json::from_value(document)?;
+        prop_assert_eq!(parsed.value, Some(amount));
     }
 
     /// A typed reference preserves every member it was given.

@@ -73,8 +73,8 @@
 //! It is *not* byte-for-byte. Members this crate knows about are emitted in
 //! struct-declaration order rather than input order; JSON number formatting is
 //! normalised; and a timestamp's fractional seconds are re-emitted in SI groups,
-//! so `.96747` becomes `.967470`. Compare with [`serde_json::Value`] equality,
-//! not string equality.
+//! so `.96747` becomes `.967470`. Compare monetary values as decimals. A
+//! [`serde_json::Number`] can retain distinct spellings of the same value.
 //!
 //! ## The one exception: an explicit `null`
 //!
@@ -251,7 +251,7 @@ pub mod prelude {
 /// no build flag that changes what a type means.
 ///
 /// It is deliberately *not* the patch version. The covered APIs sit on
-/// different patch releases — TMF621 and TMF629 are at 5.0.1 while the rest are
+/// different patch releases — TMF621, TMF629 and TMF642 are at 5.0.1 while the rest are
 /// at 5.0.0 — so the precise version each client was modelled from is a
 /// per-API constant, `SPEC_VERSION`, next to that client's `API_PATH`:
 ///

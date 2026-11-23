@@ -128,6 +128,24 @@ An `api-*` feature pulls in the domain it needs, so
 The domain model builds for `wasm32-unknown-unknown`, which CI checks — useful if
 you are validating TMF payloads in a browser or an edge worker.
 
+### Hashing or signing JSON
+
+rutmf enables serde_json’s `preserve_order` and `arbitrary_precision` features.
+Cargo unifies features for the same serde_json package across normal dependencies,
+so other `serde_json::Value` objects in your application also retain insertion
+order and numeric spellings. If your digest contract uses lexically sorted keys,
+apply the same rule before sealing and after loading JSON from storage.
+
+```rust
+let mut document: serde_json::Value = serde_json::from_str(r#"{"z":[{"y":1,"x":2}],"a":0}"#)?;
+document.sort_all_objects();
+let bytes = serde_json::to_vec(&document)?;
+assert_eq!(bytes, br#"{"a":0,"z":[{"x":2,"y":1}]}"#);
+```
+
+This sorts object keys recursively and retains array order. Agree on number
+formatting too when independent producers or a database can rewrite numbers.
+
 ## Running the examples
 
 Six runnable examples ship with the crate. The first five need no network: they
